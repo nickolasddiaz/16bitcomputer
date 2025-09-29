@@ -253,16 +253,16 @@ class IRform:
         for cmd in function.command_list:
             append_cmd = True
             if check_to_skip(cmd):
-                cmd.var1 = self.assign.assign_variables(cmd.var1, i)
-                cmd.var2 = self.assign.assign_variables(cmd.var2, i)
-                cmd.destination = self.assign.assign_variables(cmd.destination, i)
+                uninitialized = not cmd.operand in ["MOV", "LI"]
+                cmd.var1 = self.assign.assign_variables(cmd.var1, i, uninitialized)
+                cmd.var2 = self.assign.assign_variables(cmd.var2, i, uninitialized)
+                cmd.destination = self.assign.assign_variables(cmd.destination, i, False)
             if isinstance(cmd, Commands) and cmd.operand == "INSERT":
                 append_cmd = False
                 func_IR = self.IR_BUILDER[cmd.var1]
                 
-                if func_IR.block_type == BlockType.COMPARE_BLOCK:
+                if func_IR.block_type in [BlockType.COMPARE_BLOCK, BlockType.IF_BLOCK, BlockType.ELSE_BLOCK, BlockType.ELIF_BLOCK]:
                     self.function_assignment(func_IR) # recursively call the function
-                    print(self.assign.location)
                     self.assign.finalize_allocation(func_IR, cmp_list_rtrn) # put back the variables in the compare block
                 else:
                     reg_list_rtrn = self.assign.prepare_allocation(func_IR, i, global_lifetimes[func_IR.parent_function]) # prepare the allocation for the function

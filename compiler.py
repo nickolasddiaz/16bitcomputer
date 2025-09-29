@@ -638,7 +638,7 @@ class CodeTransformer(Transformer):
             else_build_label = jm.initiate_jump(Jumps.ELIF)
             IRform.add_builder(else_build_label, BlockType.ELIF_BLOCK) # ensure jump label exists in IRform
             IRform.add_commands(else_build_label, self.list_in_list(elif_body_commands))
-            elif_comparison_blocks = elif_condition_commands + [jump_end_if]
+            elif_comparison_blocks = elif_condition_commands
             elif_body_blocks = [elif_jump_command] + [Commands("INSERT",else_build_label, None)] + [jump_end_if]
             comparison_blocks.extend(elif_comparison_blocks)
             body_blocks.extend(elif_body_blocks)
@@ -699,23 +699,10 @@ class CodeTransformer(Transformer):
         return_items = items[0] if items else []
         return [Commands('RETURN', None, return_items)]
 
-program = """
-def main() {
-    c = 8;
-    b = 9;
-    a = 5;
-    d = 0;
 
-    do {
-        a = a + 1;
-        d = a - 1;
-    } while (a < b + c);
+with open('program.txt', 'r') as file:
+    program = file.read()
 
-    b = 1;
-    d = 4;
-
-}
-"""
 
 parse_tree = code_parser.parse(program)
 print("Parse Token Tree:\n")

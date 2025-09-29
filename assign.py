@@ -21,7 +21,7 @@ class Assign:
         self.lifetimes = lifetimes
         self.max_variables = max_variables
     
-    def assign_variables(self, var: str|int, index: int) -> str|int|None:
+    def assign_variables(self, var: str|int, index: int, uninitialized: bool) -> str|int|None:
         if isinstance(var, list):
             raise Exception(f"Lists are not supported in assign_variables. {var} was given.")
         if isinstance(var, None.__class__):
@@ -40,6 +40,9 @@ class Assign:
             free_reg = self.free_register(index) # get a free register
             self.location.move_variables(var, free_reg) # move variable from RAM to register
             return free_reg
+
+        if uninitialized:
+            raise Exception(f"Cannot assign an initialized variable to itself, {var} was given.")
         
         # the variables were not found in either registers or RAM, so we need to Assign them
         free_reg = self.free_register(index) # get a free register
@@ -143,13 +146,7 @@ class Assign:
         self.location.move_variables_ram(var_to_swap) # move the variable to RAM
 
         return var_to_swap
-        
-    def check_and_free(self, index: int):
-        for var, lifetime in self.lifetimes.copy().items():
-            if lifetime.check_if_dead(index):
-                in_true_local = var in self.true_local_vars
-                if not in_true_local:
-                    self.location.move_variables_ram(var)
 
-    
-    
+
+
+
