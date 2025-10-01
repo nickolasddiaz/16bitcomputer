@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-MAX_REGISTERS = 3 # 16 total - 4 reserved for temps - 1 control input
+MAX_REGISTERS = 11 # 16 total - 4 reserved for temps - 1 control input
 MAX_RAM = 256
 MAX = MAX_REGISTERS + MAX_RAM
 
