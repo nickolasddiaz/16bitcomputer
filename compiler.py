@@ -1,5 +1,7 @@
+from typing import Any
+
 from lark import Lark, Transformer
-from enum import Enum, auto
+from enum import auto, IntEnum
 from operand import Operand
 
 code_parser = Lark(r"""
@@ -92,36 +94,28 @@ code_parser = Lark(r"""
 """, start='start', parser='lalr')
 
 
-class Jumps(Enum):
-    FOR = auto()
-    END_FOR = auto()
-    IF_BLOCK = auto()
-    IF = auto()
-    END_IF = auto()
-    ELIF = auto()
-    ELSE = auto()
-    WHILE = auto()
-    DO_WHILE = auto()
-    END_WHILE = auto()
-    COMPARE = auto()
-    COMPARE_AND = auto()
-    COMPARE_OR = auto()
-    COMPARE_AND_FALSE = auto()
+class Compare(IntEnum):
+    COMP = auto()
+    ANDS = auto()
+    ORS = auto()
+
 
 class JumpManager:
     def __init__(self):
-        self.counters = {jump: 0 for jump in Jumps}
-        self.closest_jump = ""
+        self.counters = 0
+        self.jumps = dict()
 
-    def initiate_jump(self, jump_enum: Jumps) -> str:
-        self.counters[jump_enum] += 1
-        self.closest_jump = f"{jump_enum.name.upper()}_{self.counters[jump_enum]}"
-        return f"{self.closest_jump}"
+    def get_jump(self, jump_name: None|str = None) -> str:
+        self.counters += 1
+        if isinstance(jump_name, str):
+            name = jump_name
+            self.jumps[name] = 0 # to be determined later
+            return name
+        else:
+            name = "L"
+            self.jumps[name] = 0 # to be determined later
+            return f".{name}{self.counters}"
 
-    def get_closest_jump(self) -> str:
-        return self.closest_jump
-
-jm = JumpManager() # Global Jump Manager instance
 
 class Command:
     def __init__(self, op: "Operand", source: str = None, dest: int|str = None, location: str = None) -> None:
@@ -142,12 +136,13 @@ class Command:
             output += f", {self.location}"
         return output
     def negate_jump(self):
-        self.op.value = self.op.negate()
+        self.op = self.op.negate()
 
 
 class CodeTransformer(Transformer):
     def __init__(self):
         self.block = []
+        self.jm = JumpManager()
     def getblock(self):
         temp = self.block
         self.block = []
@@ -164,7 +159,7 @@ class CodeTransformer(Transformer):
         return name[0]
 
     def const(value):
-        return value[0]
+        return value
 
     def NAME(self, name):
         return name.value
@@ -176,7 +171,7 @@ class CodeTransformer(Transformer):
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
         if isint1 and isint2: # if both are int then return the operation
-            match(op):
+            match op:
                 case Operand.ADD:
                     return product1 + product2
                 case Operand.SUB:
@@ -261,39 +256,166 @@ class CodeTransformer(Transformer):
     
     # --- Comparison --------------------------
 
-    def compare_equal(self, items):
+    def compare_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JEQ
+        self.block.append(Command(Operand.JEQ))
+        return self.getblock(), (None, None, Compare.COMP)
     
-    def compare_not_equal(self, items):
+    def compare_not_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JNE
+        self.block.append(Command(Operand.JNE))
+        return self.getblock(), (None, None, Compare.COMP)
     
-    def compare_greater_equal(self, items):
+    def compare_greater_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JGE
+        self.block.append(Command(Operand.JGE))
+        return self.getblock(), (None, None, Compare.COMP)
     
-    def compare_less_equal(self, items):
+    def compare_less_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JLE
+        self.block.append(Command(Operand.JLE))
+        return self.getblock(), (None, None, Compare.COMP)
     
-    def compare_greater(self, items):
+    def compare_greater(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JG
+        self.block.append(Command(Operand.JG))
+        return self.getblock(), (None, None, Compare.COMP)
     
-    def compare_less(self, items):
+    def compare_less(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         self.product_helper(items[0], items[1], Operand.CMP)
-        return Operand.JL
+        self.block.append(Command(Operand.JL))
+        return self.getblock(), (None, None, Compare.COMP)
 
-    def and_compare(self, items) -> tuple[str, list[str]]:
-        # case 1 Input [Block1, Block2] both are came from non and/or compare
-        # case 2 right is [Block1, Block2, fail_label, success_label]
+    def and_compare(self, items: list[tuple[list[Command], tuple[str, str, Compare]]]) -> tuple[list[Command], tuple[str, str, Compare]]:
+        block1 = items[0][0]
+        block2 = items[1][0]
+        fail_label1 = items[0][1][0]
+        true_label1 = items[0][1][1]
+        type1 = items[0][1][2]
+        fail_label2 = items[1][1][0]
+        true_label2 = items[1][1][1]
+        type2 = items[1][1][2]
 
-        return items
+        final_fail = None
+        final_true = None
 
-    def or_compare(self, items) -> tuple[str, list[str]]:
+        match (type1, type2):
+            case Compare.COMP, Compare.COMP:
+                final_fail = self.jm.get_jump()
+                block1[-1].location = final_fail # set fail label
+                block1[-1].negate_jump() # negate jump
+                block2[-1].location = final_fail
+                block2[-1].negate_jump()
+            case Compare.COMP, Compare.ANDS:
+                final_fail = fail_label2
+                block1[-1].location = final_fail
+                block1[-1].negate_jump()
+            case Compare.ANDS, Compare.COMP:
+                final_fail = fail_label1
+                block2[-1].location = final_fail
+                block2[-1].negate_jump()
+            case Compare.ANDS, Compare.ANDS:
+                final_fail = f"{fail_label1},{fail_label2}"
+            case Compare.COMP, Compare.ORS:
+                final_fail = fail_label2
+                final_true = true_label2
+                block1[-1].location = final_fail
+                block1[-1].negate_jump()
+            case Compare.ORS, Compare.COMP:
+                final_fail = fail_label1
+                block1.append(Command(Operand.LABEL, None, None, true_label1))
+                block1[-1].location = final_fail
+                block1[-1].negate_jump()
+            case Compare.ORS, Compare.ORS:
+                final_fail = f"{fail_label1},{fail_label2}"
+                final_true = true_label2
+                block1.append(Command(Operand.LABEL, None, None, true_label1))
+            case Compare.ANDS, Compare.ORS:
+                final_fail = f"{fail_label1},{fail_label2}"
+                final_true = true_label2
+            case Compare.ORS, Compare.ANDS:
+                block1.append(Command(Operand.LABEL, None, None, true_label1))
+                final_fail = f"{fail_label1},{fail_label2}"
+            case _:
+                raise ValueError(f"illegal comparison for {items}")
 
-        return items
+        return block1 + block2, (final_fail, final_true, Compare.ANDS)
+
+    def or_compare(self, items: list[tuple[list[Command], tuple[str, str, Compare]]]) -> tuple[list[Command], tuple[str, str, Compare]]:
+        block1 = items[0][0]
+        block2 = items[1][0]
+        fail_label1 = items[0][1][0]
+        true_label1 = items[0][1][1]
+        type1 = items[0][1][2]
+        fail_label2 = items[1][1][0]
+        true_label2 = items[1][1][1]
+        type2 = items[1][1][2]
+
+        final_fail = None
+        final_true = None
+
+        match (type1, type2):
+            case Compare.COMP, Compare.COMP:
+                final_fail = self.jm.get_jump()
+                final_true = self.jm.get_jump()
+                block1[-1].location = final_true  # set fail label
+                block2[-1].location = final_fail
+                block2[-1].negate_jump() # negate jump
+            case Compare.COMP, Compare.ANDS:
+                final_true = self.jm.get_jump()
+                final_fail = fail_label2
+                block1[-1].location = final_true
+            case Compare.ANDS, Compare.COMP:
+                final_true = self.jm.get_jump()
+                final_fail = self.jm.get_jump()
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+                block2[-1].location = final_true
+                block2[-1].negate_jump()
+                block1.append(Command(Operand.LABEL, None, None, fail_label1))
+            case Compare.ANDS, Compare.ANDS:
+                if true_label1 is not None:
+                    final_true = true_label1
+                else:
+                    final_true = self.jm.get_jump()
+                final_fail = fail_label2
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+                block1.append(Command(Operand.LABEL, None, None, fail_label1))
+            case Compare.COMP, Compare.ORS:
+                final_true = true_label2
+                final_fail = fail_label2
+                block1[-1].location = final_true
+            case Compare.ORS, Compare.COMP:
+                final_true = true_label1
+                final_fail = fail_label1
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+                block2[-1].location = final_fail
+                block2[-1].negate_jump()
+            case Compare.ORS, Compare.ORS:
+                final_true = f"{true_label1},{true_label2}"
+                final_fail = f"{fail_label1},{fail_label2}"
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+            case Compare.ANDS, Compare.ORS:
+                final_true = f"{true_label1},{true_label2}"
+                final_fail = fail_label2
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+                block1.append(Command(Operand.LABEL, None, None, fail_label1))
+            case Compare.ORS, Compare.ANDS:
+                final_true = true_label1
+                final_fail = fail_label2
+                if fail_label1 is not None:
+                    block2.insert(0, Command(Operand.LABEL, None, None, fail_label1))
+                block1[-1].location = final_true
+                block1[-1].negate_jump()
+            case _:
+                raise ValueError(f"illegal comparison for {items}")
+
+
+        return block1 + block2, (final_fail, final_true, Compare.ORS)
 
     # --- loops declaration --------------------------
 
@@ -317,11 +439,8 @@ class CodeTransformer(Transformer):
 
         increment_commands = items[2]
         body_commands = self.list_in_list(items[3:])
-        for_jump = jm.initiate_jump(Jumps.FOR)
-        end_jump = jm.initiate_jump(Jumps.END_FOR)
-        jump_to_start = ('JMP', for_jump, None)
-        jump_to_end = ('JMP', end_jump, None)
-        end_label_command = ('NOP', None, None, end_jump)
+
+
 
 
         if not body_commands:
@@ -329,80 +448,19 @@ class CodeTransformer(Transformer):
         if not comparison_commands:
             raise ValueError("While loop must have a condition.")
         
-        comparison_commands.insert(0, ('NOP', None, None, for_jump)) # add the jump label command to the start of the comparison
+        comparison_commands.insert(0, ('NOP', None, None)) # add the jump label command to the start of the comparison
 
 
-        prev_commands = comparison_commands + [jump_to_end] + [jump_command_label] + increment_commands + body_commands
 
 
-        return init_commands + [jump_to_start] + [end_label_command]
+        return init_commands
 
     def while_loop(self, items) -> list[str]:
-        
-        # items are list[tuple(label, list[Commands]), List[Commands]]
-        # first variable label is the where it will jump to if true
-        # second variable list[Commands] is the list of commands to reach the comparison
-        # the third variable list[Commands] is the body of the while loop
-        # Overall Structure: start_label, leading_Conditions, jump_to_end_label, true_label, comparison_jump, body, jump_to_start, end_label
-        
-        true_label = items[0][0] # the incomplete jump command
-        jump_label = ('NOP', None, None, true_label)
-        while_jump = jm.initiate_jump(Jumps.WHILE)
-        end_jump = jm.initiate_jump(Jumps.END_WHILE)
 
-        comparison_commands = items[0][1]
-        if 0 <= 2 < len(items[0]): # there is a third item in to remove the jump from the insert
-            comparison_commands.append(items[0][2]) # the register allocation needs to go before the jump
-        body_commands = self.list_in_list(items[1:])
-        if not body_commands:
-            raise ValueError("While loop must have a body.")
-        
-        if not comparison_commands:
-            raise ValueError("While loop must have a condition.")
-        
-        jump_to_end = ('JMP', end_jump, None)
-        jump_to_start = ('JMP', while_jump, None)
-        end_label_command = ('NOP', None, None, end_jump)
-        
-        jump_to_start_label = ('NOP', None, None, while_jump)
-
-
-        prev_commands = [jump_to_start_label] + comparison_commands + [jump_to_end] + [jump_label] + body_commands
-
-
-
-        return [jump_to_start] + [end_label_command]
+        return items
     
     def do_while_loop(self, items) -> list[str]:
-        # items are list[list[Commands], Tuple(label, list[Commands])]
-        # first variable list[Commands] is the body of the do-while loop
-        # second variable label is the where it will jump to if true
-        # third variable list[Commands] is the list of commands to reach the comparison
-        # Overall Structure: start_label, body, leading_Conditions, comparison_jump
-        if len(items) < 2:
-            raise ValueError("Do-While loop must have at least body and condition.")
-        
-        body_commands = self.list_in_list(items[:-1])
-        
-
-        jump_label = items[-1][0]
-        comparison_commands = items[-1][1]
-        if 0 <= 2 < len(items[-1]): # there is a third item in to remove the jump from the insert
-            comparison_commands.append(items[-1][2]) # the register allocation needs to go before the jump
-        
-        
-
-        if not body_commands:
-            raise ValueError("For loop must have a body.")
-        if not comparison_commands:
-            raise ValueError("While loop must have a condition.")
-        
-        start_jump = (('NOP', None, None, jump_label)) # add the jump label command to the start of the body
-
-        while_label = jm.initiate_jump(Jumps.DO_WHILE)
-
-        insert = ('INSERT', while_label, None) # placeholder to ensure jump label exists in IRform
-        return [insert, comparison_commands[-1]]
+        return items
     # --- function declaration --------------------------
     def function_declaration(self, items):
         function_name = str(items[0])
@@ -434,82 +492,18 @@ class CodeTransformer(Transformer):
         return function_name
          
     def else_statement(self, items):
-        if len(items) < 1:
-            raise ValueError("Else statement must have at least body.")
-
-        return "ELSE", items # just the body statement returned
+        return items
 
     def elif_statement(self, items):
-        condition = items[0] if items[0] is not None else None
-        if len(items) <= 1:
-            raise ValueError("Elif statement must have at least condition and body.")
-        body = items[1:]
-        
-        return "ELIF", condition, body
+        return items
 
     def if_statement(self, items) -> list[str]:
-        # items are list[tuple(label, list[Commands]), list[Commands](one per block), ("ELIF", tuple(label, list[Commands]), list[Commands]), ("ELSE", list[Commands])]
-        if_condition_commands = items[0][1]
-        if 0 <= 2 < len(items[0]): # there is a third item in to remove the jump from the insert
-                if_condition_commands.append(items[0][2]) # the register allocation needs to go before the jump
-        if_body_commands = []
-        body_counter = -1
-
-        for index, value in enumerate(items): # Get if body 
-            body_counter += 1
-            if index == 0:
-                continue
-            if isinstance(value, list):
-                if_body_commands.extend(value)
-                continue
-            break
-        does_else_exist = (items[-1][0] == "ELSE")
-        end_if_jump_label = jm.initiate_jump(Jumps.END_IF)
-        if_jump_label = items[0][0]
-
-        jump_end_if = ('JMP', end_if_jump_label, None)
-        if not does_else_exist:
-            if_body_commands.insert(0, jump_end_if)
-        body_blocks = [('NOP', None, None, if_jump_label)]
-
-        comparison_blocks = if_condition_commands
-        if_jump_build = jm.initiate_jump(Jumps.IF)
-
-        body_blocks.append(('INSERT', if_jump_build, None)) # placeholder to ensure jump label exists in IRform
-        if does_else_exist:
-            body_blocks.append(jump_end_if)
-        
-
-        for i in range(body_counter, len(items)-1): # Get elif statements
-            elif_jump_label = items[i][1][0]
-
-
-            elif_condition_commands = items[i][1][1]
-            if 0 <= 2 < len(items[i][1]): # there is a third item in to remove the jump from the insert
-                elif_condition_commands.append(items[i][1][2]) # the register allocation needs to go before the jump
-            elif_body_commands = items[i][2]
-            else_build_label = jm.initiate_jump(Jumps.ELIF)
-
-            elif_comparison_blocks = elif_condition_commands
-            elif_body_blocks = [("INSERT",else_build_label, None)] + [jump_end_if]
-            comparison_blocks.extend(elif_comparison_blocks)
-            body_blocks.extend(elif_body_blocks)
-
-        if does_else_exist: # Get else statement      
-            else_label = jm.initiate_jump(Jumps.ELSE)
-            else_jump_command = ('JMP', else_label, None)
-            comparison_blocks.append(else_jump_command)
-            else_body_commands = items[-1][1]
-            body_blocks.append(('NOP', None, None, else_label))
-
-            body_blocks.append(('INSERT', else_label, None)) # placeholder to ensure jump label exists in IRform
-
-        end_command = ('NOP', None, None, end_if_jump_label)
-        prev_commands = comparison_blocks + body_blocks
-
-        If_block_label = jm.initiate_jump(Jumps.IF_BLOCK)
-
-        return [('INSERT', If_block_label, None)] + [end_command]
+        for i in items[0][0]:
+            print(i)
+        print(f"\nfail_label: {items[0][1][0]}")
+        print(f"true_label: {items[0][1][1]}")
+        raise ValueError(items)
+        return items
     
     def list_in_list(self,list_of_lists): # the body of the elif/else statements are in nested lists
         result = []

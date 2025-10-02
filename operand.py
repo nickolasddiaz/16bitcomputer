@@ -60,7 +60,7 @@ class Operand(Enum):
     def negate(self):
         if Operand.JEQ.value > self.value < Operand.JC.value:
             raise ValueError(f"this is not a jump: {self}")
-        if self.op.value & 1: # check if odd
+        if self.value & 1: # check if odd
             return Operand(self.value - 1)
         else:
             return Operand(self.value + 1)
