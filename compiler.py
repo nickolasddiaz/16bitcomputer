@@ -3,6 +3,7 @@ from typing import Any
 from lark import Lark, Transformer
 from enum import auto, IntEnum
 from operand import Operand
+from functools import partialmethod, partial
 
 code_parser = Lark(r"""
     ?start: function_definition*
@@ -103,22 +104,53 @@ class Compare(IntEnum):
 class JumpManager:
     def __init__(self):
         self.counters = 0
-        self.jumps = dict()
+        self.names = dict() # key: id, value: name
+        self.jumps = dict() # key: name, value: position
 
-    def get_jump(self, jump_name: None|str = None) -> str:
+    def get_jump(self) -> int:
+        self.names[self.counters] = str(self.counters)
+        self.jumps[str(self.counters)] = 0
         self.counters += 1
-        if isinstance(jump_name, str):
-            name = jump_name
-            self.jumps[name] = 0 # to be determined later
-            return name
+        return self.counters - 1
+
+    def get_function(self, jump_name: str) -> int:
+        self.names[self.counters] = jump_name
+        self.jumps[jump_name] = 0
+        self.counters += 1
+        return self.counters -1
+
+    def get_name(self, id_: int) -> str:
+        if self.names[id_].isdigit():
+            return f".L{self.names[id_]}"
         else:
-            name = "L"
-            self.jumps[name] = 0 # to be determined later
-            return f".{name}{self.counters}"
+            return f".{self.names[id_]}"
+
+    def remove_duplicate(self, id1: int|None, id2: int|None = None) -> int:
+        match (id1 is None, id2 is None):
+            case (True, True):
+                return self.get_jump()
+            case (False, True):
+                return id1
+            case(True, False):
+                return id2
+            case _:
+                num_change = self.names[id1]
+                num_to_change = self.names[id2]
+                del self.jumps[self.names[id2]]
+                for key, value in self.names.items():
+                    if value == num_to_change:
+                        self.names[key] = num_change
+                return id1
+
+    def set_pos(self, id_: int, pos: int):
+        if self.jumps[self.names[id_]] == 0:
+            self.jumps[self.names[id_]] = pos
+        else:
+            raise ValueError(f"Jump label has already been set: {self.names[id_]}")
 
 
 class Command:
-    def __init__(self, op: "Operand", source: str = None, dest: int|str = None, location: str = None) -> None:
+    def __init__(self, op: "Operand", source: str = None, dest: int|str = None, location: int = None):
         self.op = op
         self.source = source
         self.dest = dest
@@ -126,23 +158,26 @@ class Command:
 
     def __str__(self) -> str:
         if self.op == Operand.LABEL:
-            return f"{self.location}:"
+            return f"{jm.get_name(self.location)}:"
         output = f"\t{self.op.name}"
         if self.source is not None:
             output += f", {self.source}"
         if self.dest is not None:
             output += f", {self.dest}"
         if self.location is not None:
-            output += f", {self.location}"
+            output += f", {jm.get_name(self.location)}"
         return output
     def negate_jump(self):
         self.op = self.op.negate()
 
+CommandLabel = partial(Command, Operand.LABEL, None, None)
+CommandJump = partial(Command, source=None, dest=None)
 
+
+jm = JumpManager()
 class CodeTransformer(Transformer):
     def __init__(self):
         self.block = []
-        self.jm = JumpManager()
     def getblock(self):
         temp = self.block
         self.block = []
@@ -286,7 +321,7 @@ class CodeTransformer(Transformer):
         self.block.append(Command(Operand.JL))
         return self.getblock(), (None, None, Compare.COMP)
 
-    def and_compare(self, items: list[tuple[list[Command], tuple[str, str, Compare]]]) -> tuple[list[Command], tuple[str, str, Compare]]:
+    def and_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         block1 = items[0][0]
         block2 = items[1][0]
         fail_label1 = items[0][1][0]
@@ -296,52 +331,25 @@ class CodeTransformer(Transformer):
         true_label2 = items[1][1][1]
         type2 = items[1][1][2]
 
-        final_fail = None
         final_true = None
+        final_fail = jm.remove_duplicate(fail_label2, fail_label1)
 
-        match (type1, type2):
-            case Compare.COMP, Compare.COMP:
-                final_fail = self.jm.get_jump()
-                block1[-1].location = final_fail # set fail label
-                block1[-1].negate_jump() # negate jump
-                block2[-1].location = final_fail
-                block2[-1].negate_jump()
-            case Compare.COMP, Compare.ANDS:
-                final_fail = fail_label2
-                block1[-1].location = final_fail
-                block1[-1].negate_jump()
-            case Compare.ANDS, Compare.COMP:
-                final_fail = fail_label1
-                block2[-1].location = final_fail
-                block2[-1].negate_jump()
-            case Compare.ANDS, Compare.ANDS:
-                final_fail = f"{fail_label1},{fail_label2}"
-            case Compare.COMP, Compare.ORS:
-                final_fail = fail_label2
-                final_true = true_label2
-                block1[-1].location = final_fail
-                block1[-1].negate_jump()
-            case Compare.ORS, Compare.COMP:
-                final_fail = fail_label1
-                block1.append(Command(Operand.LABEL, None, None, true_label1))
-                block1[-1].location = final_fail
-                block1[-1].negate_jump()
-            case Compare.ORS, Compare.ORS:
-                final_fail = f"{fail_label1},{fail_label2}"
-                final_true = true_label2
-                block1.append(Command(Operand.LABEL, None, None, true_label1))
-            case Compare.ANDS, Compare.ORS:
-                final_fail = f"{fail_label1},{fail_label2}"
-                final_true = true_label2
-            case Compare.ORS, Compare.ANDS:
-                block1.append(Command(Operand.LABEL, None, None, true_label1))
-                final_fail = f"{fail_label1},{fail_label2}"
-            case _:
-                raise ValueError(f"illegal comparison for {items}")
+        if type1 == Compare.COMP:
+            block1[-1].location = final_fail
+            block1[-1].negate_jump()
+        if type2 == Compare.COMP:
+            block2[-1].location = final_fail
+            block2[-1].negate_jump()
+
+        if true_label1 is not None:
+            block1.append(CommandLabel(true_label1))
+
+        if type1 != Compare.COMP and type2 != Compare.COMP:
+            final_true = true_label2
 
         return block1 + block2, (final_fail, final_true, Compare.ANDS)
 
-    def or_compare(self, items: list[tuple[list[Command], tuple[str, str, Compare]]]) -> tuple[list[Command], tuple[str, str, Compare]]:
+    def or_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         block1 = items[0][0]
         block2 = items[1][0]
         fail_label1 = items[0][1][0]
@@ -351,69 +359,19 @@ class CodeTransformer(Transformer):
         true_label2 = items[1][1][1]
         type2 = items[1][1][2]
 
-        final_fail = None
-        final_true = None
+        final_true = jm.remove_duplicate(true_label1, true_label2)
+        final_fail = jm.remove_duplicate(fail_label2)
 
-        match (type1, type2):
-            case Compare.COMP, Compare.COMP:
-                final_fail = self.jm.get_jump()
-                final_true = self.jm.get_jump()
-                block1[-1].location = final_true  # set fail label
-                block2[-1].location = final_fail
-                block2[-1].negate_jump() # negate jump
-            case Compare.COMP, Compare.ANDS:
-                final_true = self.jm.get_jump()
-                final_fail = fail_label2
-                block1[-1].location = final_true
-            case Compare.ANDS, Compare.COMP:
-                final_true = self.jm.get_jump()
-                final_fail = self.jm.get_jump()
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-                block2[-1].location = final_true
-                block2[-1].negate_jump()
-                block1.append(Command(Operand.LABEL, None, None, fail_label1))
-            case Compare.ANDS, Compare.ANDS:
-                if true_label1 is not None:
-                    final_true = true_label1
-                else:
-                    final_true = self.jm.get_jump()
-                final_fail = fail_label2
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-                block1.append(Command(Operand.LABEL, None, None, fail_label1))
-            case Compare.COMP, Compare.ORS:
-                final_true = true_label2
-                final_fail = fail_label2
-                block1[-1].location = final_true
-            case Compare.ORS, Compare.COMP:
-                final_true = true_label1
-                final_fail = fail_label1
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-                block2[-1].location = final_fail
-                block2[-1].negate_jump()
-            case Compare.ORS, Compare.ORS:
-                final_true = f"{true_label1},{true_label2}"
-                final_fail = f"{fail_label1},{fail_label2}"
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-            case Compare.ANDS, Compare.ORS:
-                final_true = f"{true_label1},{true_label2}"
-                final_fail = fail_label2
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-                block1.append(Command(Operand.LABEL, None, None, fail_label1))
-            case Compare.ORS, Compare.ANDS:
-                final_true = true_label1
-                final_fail = fail_label2
-                if fail_label1 is not None:
-                    block2.insert(0, Command(Operand.LABEL, None, None, fail_label1))
-                block1[-1].location = final_true
-                block1[-1].negate_jump()
-            case _:
-                raise ValueError(f"illegal comparison for {items}")
+        block1[-1].location = final_true
+        if type1 is not Compare.COMP:
+            block1[-1].negate_jump()
 
+        if type2 == Compare.COMP:
+            block2[-1].location = final_fail
+            block2[-1].negate_jump()
+
+        if fail_label1 is not None:
+            block1.append(CommandLabel(fail_label1))
 
         return block1 + block2, (final_fail, final_true, Compare.ORS)
 
