@@ -8,7 +8,7 @@ from functools import partialmethod, partial
 code_parser = Lark(r"""
     ?start: function_definition*
 
-    ?function_definition:"def" NAME "(" args ")" "{" inline_block* "}"-> function_declaration
+    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block* "}"-> function_declaration
 
     ?inline_block: statements
         | block ";"
@@ -171,7 +171,7 @@ class Command:
         self.op = self.op.negate()
 
 CommandLabel = partial(Command, Operand.LABEL, None, None)
-CommandJump = partial(Command, source=None, dest=None)
+CommandJump = partial(Command, Operand.JMP, None, None)
 
 
 jm = JumpManager()
@@ -377,48 +377,70 @@ class CodeTransformer(Transformer):
 
     # --- loops declaration --------------------------
 
-    def for_loop(self, items) -> list[str]:
-        # items are list[list[Commands], Tuple(Label, list[Commands]), list[Commands], list[Commands]]
-        # first variable list[Commands] is the init part
-        # second variable label is the where it will jump to if true
-        # third variable list[Commands] is the list of commands to reach the comparison
-        # fourth variable list[Commands] is the increment part
-        # fifth variable list[Commands] is the body of the for loop
-        # Overall Structure: init, start_label, leading_Conditions, comparison_jump, Jump_to_end, jump_label, body, increment, jump_to_start, end_label
-        if len(items) < 4:
-            raise ValueError("For loop must have at least init, condition, increment, and body.")
+    @staticmethod
+    def loop_helper(true_label, fail_label, condition_block, compare_type):
 
-        init_commands = items[0]
-        jump_label = items[1][0] # the incomplete jump command
-        jump_command_label = ('NOP', None, None, jump_label)
-        comparison_commands = items[1][1]
-        if 0 <= 2 < len(items[1]): # there is a third item in to remove the jump from the insert
-            comparison_commands.append(items[1][2]) # the register allocation needs to go before the jump
+        if true_label is None:
+            true_label = jm.get_jump()
 
-        increment_commands = items[2]
-        body_commands = self.list_in_list(items[3:])
+        condition_block[-1].location = true_label
+        if compare_type != Compare.COMP:
+            condition_block[-1].negate_jump()
 
+        if fail_label is not None:
+            condition_block.append(CommandLabel(fail_label))
 
+        return true_label
 
+    def for_loop(self, items) -> list[Command]:
+        initialization = items[0]
+        condition = items[1]
+        increment = items[2]
+        main_block = items[3]
+        fail_label = condition[1][0]
+        true_label = condition[1][1]
+        compare_type = condition[1][2]
+        condition_block = condition[0]
 
-        if not body_commands:
-            raise ValueError("For loop must have a body.")
-        if not comparison_commands:
-            raise ValueError("While loop must have a condition.")
-        
-        comparison_commands.insert(0, ('NOP', None, None)) # add the jump label command to the start of the comparison
+        start_loop_label = jm.get_jump()
 
+        true_label = self.loop_helper(true_label, fail_label, condition_block, compare_type)
 
+        final_commands = (initialization + [CommandJump(start_loop_label), CommandLabel(true_label)] +
+                          main_block + increment + [CommandLabel(start_loop_label)] + condition_block)
 
+        return final_commands
 
-        return init_commands
+    def while_loop(self, items) -> list[Command]:
+        condition = items[0]
+        fail_label = condition[1][0]
+        true_label = condition[1][1]
+        compare_type = condition[1][2]
+        condition_block = condition[0]
+        main_block = items[1]
 
-    def while_loop(self, items) -> list[str]:
+        start_loop_label = jm.get_jump()
 
-        return items
+        true_label = self.loop_helper(true_label, fail_label, condition_block, compare_type)
+
+        final_commands = ([CommandJump(start_loop_label), CommandLabel(true_label)] + main_block  +
+                          [CommandLabel(start_loop_label)] + condition_block)
+
+        return final_commands
     
-    def do_while_loop(self, items) -> list[str]:
-        return items
+    def do_while_loop(self, items) -> list[Command]:
+        condition = items[1]
+        fail_label = condition[1][0]
+        true_label = condition[1][1]
+        compare_type = condition[1][2]
+        condition_block = condition[0]
+        main_block = items[0]
+
+        true_label = self.loop_helper(true_label, fail_label, condition_block, compare_type)
+
+        final_commands = [CommandLabel(true_label)] + main_block + condition_block
+
+        return final_commands
     # --- function declaration --------------------------
     def function_declaration(self, items):
         function_name = str(items[0])
@@ -448,20 +470,59 @@ class CodeTransformer(Transformer):
                     var_name, commands = statement
 
         return function_name
-         
-    def else_statement(self, items):
-        return items
 
-    def elif_statement(self, items):
-        return items
+    @staticmethod
+    def if_helper(compare_type:int, fail_label: int, true_label:int, compare_block: list[Command], main_block: list[Command]) -> list[Command]:
+        if compare_type == Compare.COMP:
+            compare_block[-1].negate_jump()
+            fail_label = jm.get_jump()
+            compare_block[-1].location = fail_label
 
-    def if_statement(self, items) -> list[str]:
-        for i in items[0][0]:
-            print(i)
-        print(f"\nfail_label: {items[0][1][0]}")
-        print(f"true_label: {items[0][1][1]}")
-        raise ValueError(items)
-        return items
+        if fail_label is None:
+            raise ValueError("if statement must have a fail condition")
+        else:
+            main_block.append(CommandLabel(fail_label))
+
+        if true_label is not None:
+            compare_block.append(CommandLabel(true_label))
+
+        return compare_block + main_block
+
+    def else_statement(self, items: list[list[Command]]) -> list[Command]:
+        return items[0]
+
+    def elif_statement(self, items) -> list[Command]:
+        elif_compare = items[0][0]
+        elif_fail_label = items[0][1][0]
+        elif_true_label = items[0][1][1]
+        elif_compare_type = items[0][1][2]
+        elif_block = items[1]
+
+        return self.if_helper(elif_compare_type, elif_fail_label, elif_true_label, elif_compare, elif_block)
+
+    def if_statement(self, items) -> list[Command]:
+        if_compare = items[0][0]
+        if_fail_label = items[0][1][0]
+        if_true_label = items[0][1][1]
+        if_compare_type = items[0][1][2]
+        if_block = items[1]
+
+        final_commands = self.if_helper(if_compare_type, if_fail_label, if_true_label, if_compare, if_block)
+
+        final_jump_label = jm.get_jump()
+        final_jump = CommandJump(final_jump_label)
+
+
+        for item in items[2:]:
+            final_commands.insert(-1, final_jump)
+            final_commands.extend(item)
+
+        if final_commands[-1].op != Operand.LABEL:
+            final_commands.append(CommandLabel(final_jump_label))
+        else:
+            jm.remove_duplicate(final_jump_label, final_commands[-1].location)
+
+        return final_commands
     
     def list_in_list(self,list_of_lists): # the body of the elif/else statements are in nested lists
         result = []
