@@ -2,7 +2,7 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, JumpManager, jm
+from ram import Operand, Command, JumpManager, jm, Ram
 from functools import partialmethod, partial
 
 code_parser = Lark(r"""
@@ -99,10 +99,6 @@ class Compare(IntEnum):
     ORS = auto()
 
 
-
-
-
-
 CommandLabel = partial(Command, Operand.LABEL, None, None)
 CommandJump = partial(Command, Operand.JMP, None, None)
 CommandInnerStart = partial(Command, Operand.INNER_START, None, None, None)
@@ -136,7 +132,10 @@ class CodeTransformer(Transformer):
     def nop(self, items):
         return ('NOP',),
     # --- product functions --------------------------
-    def product_helper(self, product1: int|str, product2: int|str, op: Operand) -> int|str:
+    def product_helper(self, product1: int|str, product2: int|str, op: Operand, swap:bool = False) -> int|str:
+        if swap and product2 == "":
+            product1, product2 = product2, product1
+
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
         if isint1 and isint2: # if both are int then return the operation
@@ -164,17 +163,11 @@ class CodeTransformer(Transformer):
         if isint1 and not isint2: # swap the variables right variable and left int
             product1, product2 = product2, product1
 
-        if isint1 ^ isint2: # if either is int then have it be immediate
-            op = Operand(op.value + 1) # example if add then it turns into addi
-
-        if product1 == "*temp*":
-            product2, product1 = product1, product2
-
         self.block.append(Command(op, product1, product2))
-        return "*temp*"
+        return ""
 
     def add(self, items):
-        return self.product_helper(items[0], items[1], Operand.ADD)
+        return self.product_helper(items[0], items[1], Operand.ADD, True)
     def sub(self, items):
         return self.product_helper(items[0], items[1], Operand.SUB)
     def bit_and(self, items):
@@ -184,7 +177,7 @@ class CodeTransformer(Transformer):
     def bit_xor(self, items):
         return self.product_helper(items[0], items[1], Operand.XOR)
     def mult(self, items):
-        return self.product_helper(items[0], items[1], Operand.MULT)
+        return self.product_helper(items[0], items[1], Operand.MULT, True)
     def div(self, items):
         return self.product_helper(items[0], items[1], Operand.DIV)
     def quot(self, items):
@@ -192,10 +185,10 @@ class CodeTransformer(Transformer):
 
     
     def increment(self, items) -> list[Command]:
-        return [Command(Operand.ADD, 1, items[0])]
+        return [Command(Operand.ADD, items[0], 1)]
     
     def decrement(self, items) -> list[Command]:
-        return [Command(Operand.ADD, 1, items[0])]
+        return [Command(Operand.SUB, items[0], 1)]
     
     # --- assignments functions --------------------------
 
@@ -444,24 +437,8 @@ class CodeTransformer(Transformer):
         return result
 
     # --- function declaration --------------------------
-    def process_command(self, item: Command) -> list[Command]:
-        final_commands = []
-        item.source = self.getvariable(item.source)
-        item.dest = self.getvariable(item.dest)
-
-
-
-
-
-        return final_commands
-
-
-    def inner_function(self, main_block: list[Command], index: int) -> list[Command]:
-        return []
-
-
-
     def function_declaration(self, items) -> list[Command]:
+        var_all: Ram = Ram()
         function_name: str = items[0]
         function_arguments: list[str] = items[1]
         main_block: list[Command] = self.list_in_list(items[2:])
@@ -469,15 +446,15 @@ class CodeTransformer(Transformer):
         function_label = jm.get_function(function_name)
         final_block = [CommandLabel(function_label)]
 
+        var_all.compute_lifetimes(main_block)
+
         for index, item in enumerate(main_block, start=0):
             if item.op == Operand.INNER_START:
-                final_block.extend(self.inner_function(main_block, index))
-            elif item.op.check_jump():
-                final_block.append(item)
+                var_all.inner_start()
+            elif item.op == Operand.INNER_END:
+                var_all.inner_end()
             else:
-                final_block.extend(self.process_command(item))
-
-            final_block.append(item)
+                final_block.extend(var_all.allocate_command(item, index))
 
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
