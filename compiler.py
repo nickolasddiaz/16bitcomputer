@@ -2,25 +2,25 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from operand import Operand
+from ram import Operand, Command, JumpManager, jm
 from functools import partialmethod, partial
 
 code_parser = Lark(r"""
-    ?start: function_definition*
+    ?start: function_definition+
 
-    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block* "}"-> function_declaration
+    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block+ "}"-> function_declaration
 
     ?inline_block: statements
         | block ";"
 
-    ?statements: "for"i "(" assigns? ";" compares? ";" assigns? ")" "{" inline_block* "}" -> for_loop
-        | "while"i "(" compares ")" "{" inline_block* "}"          -> while_loop
-        | "if"i "(" compares ")" "{" inline_block* "}" elif_statement* else_statement? -> if_statement
-        | "do"i "{" inline_block* "}" "while"i "(" compares ");"-> do_while_loop
+    ?statements: "for"i "(" assigns ";" compares ";" assigns ")" "{" inline_block+ "}" -> for_loop
+        | "while"i "(" compares ")" "{" inline_block+ "}"          -> while_loop
+        | "if"i "(" compares ")" "{" inline_block+ "}" elif_statement* else_statement? -> if_statement
+        | "do"i "{" inline_block+ "}" "while"i "(" compares ");"-> do_while_loop
 
-    ?elif_statement: "elif"i "(" compares ")" "{" inline_block* "}" -> elif_statement
+    ?elif_statement: "elif"i "(" compares ")" "{" inline_block+ "}" -> elif_statement
 
-    ?else_statement: "else"i "{" inline_block* "}" -> else_statement
+    ?else_statement: "else"i "{" inline_block+ "}" -> else_statement
 
     ?args: (NAME|NUMBER) ("," (NAME|NUMBER))* -> args
         |                  -> empty_args
@@ -52,10 +52,8 @@ code_parser = Lark(r"""
         | expr "<=" expr -> compare_less_equal
         | expr ">" expr -> compare_greater
         | expr "<" expr -> compare_less
-        | compares "and" compares -> and_compare
-        | compares "&&" compares -> and_compare
-        | compares "or" compares -> or_compare
-        | compares "||" compares -> or_compare
+        | compares ("&&"|"and"i) compares -> and_compare
+        | compares ("||"|"or"i) compares -> or_compare
         | "(" compares ")"
 
     ?expr: sum
@@ -101,80 +99,16 @@ class Compare(IntEnum):
     ORS = auto()
 
 
-class JumpManager:
-    def __init__(self):
-        self.counters = 0
-        self.names = dict() # key: id, value: name
-        self.jumps = dict() # key: name, value: position
-
-    def get_jump(self) -> int:
-        self.names[self.counters] = str(self.counters)
-        self.jumps[str(self.counters)] = 0
-        self.counters += 1
-        return self.counters - 1
-
-    def get_function(self, jump_name: str) -> int:
-        self.names[self.counters] = jump_name
-        self.jumps[jump_name] = 0
-        self.counters += 1
-        return self.counters -1
-
-    def get_name(self, id_: int) -> str:
-        if self.names[id_].isdigit():
-            return f".L{self.names[id_]}"
-        else:
-            return f".{self.names[id_]}"
-
-    def remove_duplicate(self, id1: int|None, id2: int|None = None) -> int:
-        match (id1 is None, id2 is None):
-            case (True, True):
-                return self.get_jump()
-            case (False, True):
-                return id1
-            case(True, False):
-                return id2
-            case _:
-                num_change = self.names[id1]
-                num_to_change = self.names[id2]
-                del self.jumps[self.names[id2]]
-                for key, value in self.names.items():
-                    if value == num_to_change:
-                        self.names[key] = num_change
-                return id1
-
-    def set_pos(self, id_: int, pos: int):
-        if self.jumps[self.names[id_]] == 0:
-            self.jumps[self.names[id_]] = pos
-        else:
-            raise ValueError(f"Jump label has already been set: {self.names[id_]}")
 
 
-class Command:
-    def __init__(self, op: "Operand", source: str = None, dest: int|str = None, location: int = None):
-        self.op = op
-        self.source = source
-        self.dest = dest
-        self.location = location
 
-    def __str__(self) -> str:
-        if self.op == Operand.LABEL:
-            return f"{jm.get_name(self.location)}:"
-        output = f"\t{self.op.name}"
-        if self.source is not None:
-            output += f", {self.source}"
-        if self.dest is not None:
-            output += f", {self.dest}"
-        if self.location is not None:
-            output += f", {jm.get_name(self.location)}"
-        return output
-    def negate_jump(self):
-        self.op = self.op.negate()
 
 CommandLabel = partial(Command, Operand.LABEL, None, None)
 CommandJump = partial(Command, Operand.JMP, None, None)
+CommandInnerStart = partial(Command, Operand.INNER_START, None, None, None)
+CommandInnerEnd = partial(Command, Operand.INNER_END, None, None, None)
 
 
-jm = JumpManager()
 class CodeTransformer(Transformer):
     def __init__(self):
         self.block = []
@@ -202,7 +136,7 @@ class CodeTransformer(Transformer):
     def nop(self, items):
         return ('NOP',),
     # --- product functions --------------------------
-    def product_helper(self, product1: int|str, product2: int|str, op: "Operand") -> int|str:
+    def product_helper(self, product1: int|str, product2: int|str, op: Operand) -> int|str:
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
         if isint1 and isint2: # if both are int then return the operation
@@ -233,8 +167,11 @@ class CodeTransformer(Transformer):
         if isint1 ^ isint2: # if either is int then have it be immediate
             op = Operand(op.value + 1) # example if add then it turns into addi
 
+        if product1 == "*temp*":
+            product2, product1 = product1, product2
+
         self.block.append(Command(op, product1, product2))
-        return product1
+        return "*temp*"
 
     def add(self, items):
         return self.product_helper(items[0], items[1], Operand.ADD)
@@ -254,13 +191,11 @@ class CodeTransformer(Transformer):
         return self.product_helper(items[0], items[1], Operand.QUOT)
 
     
-    def increment(self, items) -> tuple[str | int, list[str]]:
-        self.block.append(Command(Operand.INC, items[0]))
-        return None
+    def increment(self, items) -> list[Command]:
+        return [Command(Operand.ADD, 1, items[0])]
     
-    def decrement(self, items) -> tuple[str | int, list[str]]:
-        self.block.append(Command(Operand.DEC, items[0]))
-        return None
+    def decrement(self, items) -> list[Command]:
+        return [Command(Operand.ADD, 1, items[0])]
     
     # --- assignments functions --------------------------
 
@@ -271,22 +206,18 @@ class CodeTransformer(Transformer):
     
     def add_assign_var(self, items):
         self.product_helper(items[0], items[1], Operand.ADD)
-        self.product_helper(items[0], items[1], Operand.MOV)
         return self.getblock()
     
     def sub_assign_var(self, items):
         self.product_helper(items[0], items[1], Operand.SUB)
-        self.product_helper(items[0], items[1], Operand.MOV)
         return self.getblock()
     
     def mul_assign_var(self, items):
         self.product_helper(items[0], items[1], Operand.MULT)
-        self.product_helper(items[0], items[1], Operand.MOV)
         return self.getblock()
     
     def div_assign_var(self, items):
         self.product_helper(items[0], items[1], Operand.DIV)
-        self.product_helper(items[0], items[1], Operand.MOV)
         return self.getblock()
     
     # --- Comparison --------------------------
@@ -396,7 +327,7 @@ class CodeTransformer(Transformer):
         initialization = items[0]
         condition = items[1]
         increment = items[2]
-        main_block = items[3]
+        main_block = self.list_in_list(items[3:])
         fail_label = condition[1][0]
         true_label = condition[1][1]
         compare_type = condition[1][2]
@@ -409,7 +340,7 @@ class CodeTransformer(Transformer):
         final_commands = (initialization + [CommandJump(start_loop_label), CommandLabel(true_label)] +
                           main_block + increment + [CommandLabel(start_loop_label)] + condition_block)
 
-        return final_commands
+        return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
 
     def while_loop(self, items) -> list[Command]:
         condition = items[0]
@@ -417,7 +348,7 @@ class CodeTransformer(Transformer):
         true_label = condition[1][1]
         compare_type = condition[1][2]
         condition_block = condition[0]
-        main_block = items[1]
+        main_block = self.list_in_list(items[1:])
 
         start_loop_label = jm.get_jump()
 
@@ -426,51 +357,22 @@ class CodeTransformer(Transformer):
         final_commands = ([CommandJump(start_loop_label), CommandLabel(true_label)] + main_block  +
                           [CommandLabel(start_loop_label)] + condition_block)
 
-        return final_commands
+        return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
     
     def do_while_loop(self, items) -> list[Command]:
-        condition = items[1]
+        condition = items[-1]
         fail_label = condition[1][0]
         true_label = condition[1][1]
         compare_type = condition[1][2]
         condition_block = condition[0]
-        main_block = items[0]
-
+        main_block = self.list_in_list(items[:-1])
         true_label = self.loop_helper(true_label, fail_label, condition_block, compare_type)
 
         final_commands = [CommandLabel(true_label)] + main_block + condition_block
 
-        return final_commands
-    # --- function declaration --------------------------
-    def function_declaration(self, items):
-        function_name = str(items[0])
+        return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
 
-        args = items[1] if len(items) > 1 else []
-        body = items[2:] if len(items) > 2 else []
-
-        # Handle arguments - check if args is iterable
-        if hasattr(args, '__iter__') and not isinstance(args, str):
-            for i, arg in enumerate(args):
-                if isinstance(arg, tuple): # if arg is a (var_name, commands) tuple
-                    var_name, commands = arg
-
-                else:
-                    var_name = arg
-                self.add_command(function_name, ('mov', var_name, f'arg{i}'))
-        
-        # Handle body
-        for statement in body:
-            if isinstance(statement, list):
-                for stmt in statement:
-                    if isinstance(stmt, tuple): # if stmt is a (var_name, commands) tuple
-                        var_name, commands = stmt
-
-            else:
-                if isinstance(statement, tuple): # if statement is a (var_name, commands) tuple
-                    var_name, commands = statement
-
-        return function_name
-
+    # --- if-else declaration --------------------------
     @staticmethod
     def if_helper(compare_type:int, fail_label: int, true_label:int, compare_block: list[Command], main_block: list[Command]) -> list[Command]:
         if compare_type == Compare.COMP:
@@ -488,24 +390,32 @@ class CodeTransformer(Transformer):
 
         return compare_block + main_block
 
-    def else_statement(self, items: list[list[Command]]) -> list[Command]:
-        return items[0]
+    def else_statement(self, items: list[list[Command]]) -> tuple[list[Command]]:
+        return (self.list_in_list(items),)
 
-    def elif_statement(self, items) -> list[Command]:
+    def elif_statement(self, items) -> tuple[list[Command]]:
         elif_compare = items[0][0]
         elif_fail_label = items[0][1][0]
         elif_true_label = items[0][1][1]
         elif_compare_type = items[0][1][2]
-        elif_block = items[1]
+        elif_block = self.list_in_list(items[1:])
 
-        return self.if_helper(elif_compare_type, elif_fail_label, elif_true_label, elif_compare, elif_block)
+        return (self.if_helper(elif_compare_type, elif_fail_label, elif_true_label, elif_compare, elif_block),)
 
     def if_statement(self, items) -> list[Command]:
         if_compare = items[0][0]
         if_fail_label = items[0][1][0]
         if_true_label = items[0][1][1]
         if_compare_type = items[0][1][2]
-        if_block = items[1]
+
+        if_block_ends = 2
+        for item in items[2:]:
+            if isinstance(item, list):
+                if_block_ends += 1
+            else:
+                break
+
+        if_block = self.list_in_list(items[1:if_block_ends])
 
         final_commands = self.if_helper(if_compare_type, if_fail_label, if_true_label, if_compare, if_block)
 
@@ -513,16 +423,16 @@ class CodeTransformer(Transformer):
         final_jump = CommandJump(final_jump_label)
 
 
-        for item in items[2:]:
+        for item in items[if_block_ends:]:
             final_commands.insert(-1, final_jump)
-            final_commands.extend(item)
+            final_commands.extend(item[0])
 
         if final_commands[-1].op != Operand.LABEL:
             final_commands.append(CommandLabel(final_jump_label))
         else:
             jm.remove_duplicate(final_jump_label, final_commands[-1].location)
 
-        return final_commands
+        return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
     
     def list_in_list(self,list_of_lists): # the body of the elif/else statements are in nested lists
         result = []
@@ -533,7 +443,48 @@ class CodeTransformer(Transformer):
                 result.append(item)
         return result
 
+    # --- function declaration --------------------------
+    def process_command(self, item: Command) -> list[Command]:
+        final_commands = []
+        item.source = self.getvariable(item.source)
+        item.dest = self.getvariable(item.dest)
+
+
+
+
+
+        return final_commands
+
+
+    def inner_function(self, main_block: list[Command], index: int) -> list[Command]:
+        return []
+
+
+
+    def function_declaration(self, items) -> list[Command]:
+        function_name: str = items[0]
+        function_arguments: list[str] = items[1]
+        main_block: list[Command] = self.list_in_list(items[2:])
+
+        function_label = jm.get_function(function_name)
+        final_block = [CommandLabel(function_label)]
+
+        for index, item in enumerate(main_block, start=0):
+            if item.op == Operand.INNER_START:
+                final_block.extend(self.inner_function(main_block, index))
+            elif item.op.check_jump():
+                final_block.append(item)
+            else:
+                final_block.extend(self.process_command(item))
+
+            final_block.append(item)
+
+        if function_name == "main":
+            final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
+
+        return final_block
     # --- function call --------------------------
+
     def assignment_list(self, items):
         return items
     
@@ -573,4 +524,8 @@ print("\nPretty Print Parse Token Tree:\n")
 print(parse_tree.pretty())
 
 transformed = CodeTransformer().transform(parse_tree)
-print(transformed)
+
+print("\nAssembly Code:\n")
+
+for i in transformed:
+    print(i)
