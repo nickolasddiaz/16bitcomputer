@@ -2,71 +2,87 @@ from collections import ChainMap
 from enum import Enum, auto
 
 class ram_var:
-    def __init__(self, name: int) -> None:
-        self.name: int = name
+    def __init__(self, val: int) -> None:
+        self.val: int = val
     def __str__(self) -> str:
-        return f"[{self.name}]"
+        return f"[{self.val}]"
 
 class reg_var:
-    def __init__(self, name:int) -> None:
-        self.name:int = name
+    def __init__(self, val:int) -> None:
+        self.val:int = val
     def __str__(self) -> str:
-        return f"R_{self.name}"
+        return f"R_{self.val}"
 
 class Operand(Enum):
     NOP = auto()
     HALT = auto()
-    MOV = auto()
-    MOVR = auto()
-    MOVI = auto()
-    ST  = auto()
-    STR  = auto()
-    STI  = auto()
+    VID = auto() # color the video
+    VID_V = auto() # set XTerm256 color model (8-bit)
+    VID_X = auto() # set the x-axis 16 pixels wide
+    VID_Y = auto() # set the y-axis 16 pixels tall
+    MOV = auto() # move register, register
+    MOV_R = auto()  # move ram, register
+    MOV_I = auto() # move register, immediate
+    MOV_L = auto()  # move register, ram
+    MOV_RI = auto()  # move ram, immediate
     CMP = auto()
-    CMPR = auto()
-    CMPI = auto()
-    VID = auto()
+    CMP_R = auto()
+    CMP_I = auto()
+    CMP_L = auto()
     ADD = auto()
-    ADDR = auto()
-    ADDI = auto()
+    ADD_R = auto()
+    ADD_I = auto()
+    ADD_L = auto()
     SUB = auto()
-    SUBR = auto()
-    SUBI = auto()
+    SUB_R = auto()
+    SUB_I = auto()
+    SUB_L = auto()
     MULT = auto()
-    MULR = auto()
-    MULTI = auto()
+    MUL_R = auto()
+    MULT_I = auto()
+    MULT_L = auto()
     DIV = auto()
-    DIVR = auto()
-    DIVI = auto()
+    DIV_R = auto()
+    DIV_I = auto()
+    DIV_L = auto()
     QUOT = auto()
-    QUOTR = auto()
-    QUOTI = auto()
+    QUOT_R = auto()
+    QUOT_I = auto()
+    QUOT_L = auto()
     AND = auto()
-    ANDR = auto()
-    ANDI = auto()
+    AND_R = auto()
+    AND_I = auto()
+    AND_L = auto()
     OR = auto()
-    ORR = auto()
-    ORI = auto()
+    OR_R = auto()
+    OR_I = auto()
+    OR_L = auto()
     XOR = auto()
-    XORR = auto()
-    XORI = auto()
+    XOR_R = auto()
+    XOR_I = auto()
+    XOR_L = auto()
     SHL = auto()
-    SHLR = auto()
-    SHLI = auto()
+    SHL_R = auto()
+    SHL_I = auto()
+    SHL_L = auto()
     SHR = auto()
-    SHRR = auto()
-    SHRI = auto()
+    SHR_R = auto()
+    SHR_I = auto()
+    SHR_L = auto()
     RR = auto()
-    RRR = auto()
-    RRI = auto()
+    RR_R = auto()
+    RR_I = auto()
+    RR_L = auto()
     RL = auto()
-    RLR = auto()
-    RLI = auto()
+    RL_R = auto()
+    RL_I = auto()
+    RL_L = auto()
     AR = auto()
-    ARR = auto()
-    ARI = auto()
+    AR_R = auto()
+    AR_I = auto()
+    AR_L = auto()
     NOT = auto()
-    NOTR = auto()
+    NOT_R = auto()
     JMP = auto()
     JEQ = auto()
     JNE = auto()
@@ -80,11 +96,6 @@ class Operand(Enum):
     JC = auto()
     CALL = auto()
     RTRN = auto()
-    PUSH = auto()
-    PUSHI = auto()
-    PUSHR = auto()
-    POP = auto()
-    POPR = auto()
     LABEL = auto()
     INNER_START = auto()
     INNER_END = auto()
@@ -97,11 +108,31 @@ class Operand(Enum):
         else:
             return Operand(self.value - 1)
 
+    def correct_op(self, source, dest):
+        # MOV = auto()  # move register, register
+        # MOV_R = auto()  # move ram, register
+        # MOV_I = auto()  # move register, immediate
+        # MOV_L = auto()  # move register, ram
+        # MOV_RI = auto()  # move ram, immediate
+        if not Operand.MOV.value <= self.value <= Operand.NOT_R.value:
+            return self
+
+        match (source, dest):
+            case ram_var(), reg_var():
+                return Operand(self.value + 1)
+            case reg_var(), int():
+                return Operand(self.value + 2)
+            case reg_var(), ram_var():
+                return Operand(self.value + 3)
+            case ram_var(), int():
+                return Operand(self.value + 4)
+
     def check_jump(self):
         return Operand.JEQ.value <= self.value <= Operand.JC.value
 
     def check_arith(self):
-        return Operand.ADD.value <= self.value <= Operand.ARI.value
+        return Operand.ADD.value <= self.value <= Operand.NOT_R.value
+
 
 class Command:
     def __init__(self, op: Operand, source: int|str|ram_var|reg_var|None = None, dest: int|str|ram_var|reg_var|None = None, location: int = None):
@@ -127,8 +158,45 @@ class Command:
         if self.location is not None:
             output += f", {jm.get_name(self.location)}"
         return output
-    def negate_jump(self):
+
+    def negate_jump(self) -> None:
         self.op = self.op.negate()
+
+    def compute_op(self) -> None:
+        self.op = self.op.correct_op(self.source, self.dest)
+
+    def get_binary(self) -> str:
+        if self.op == Operand.LABEL:
+            return ""
+
+        temp = ""
+        binary: str = f"{self.op.value:02x}"
+        if isinstance(self.source, reg_var) and isinstance(self.dest, reg_var):
+            binary += f"{self.source.val:01x}{self.source.val:01x}"
+        else:
+            if isinstance(self.source, ram_var):
+                temp = self.number_hex(self.source.val)
+            elif isinstance(self.source, int):
+                temp = self.number_hex(self.source)
+            if temp is not None:
+                binary += temp
+            if isinstance(self.dest, ram_var):
+                temp = self.number_hex(self.dest.val)
+            elif isinstance(self.dest, int):
+                temp = self.number_hex(self.dest)
+            if temp is not None:
+                binary += temp
+
+        if self.location is not None:
+            id = jm.get_index(self.location)
+            binary += self.number_hex(id >> 4)
+            binary += self.number_hex(id & 0x0F)
+
+        return binary
+
+    @staticmethod
+    def number_hex(num: int) -> str:
+        return f"{num:02x}"
 
 
 class Ram:
@@ -262,6 +330,9 @@ class JumpManager:
             return f".L{self.names[id_]}"
         else:
             return f".{self.names[id_]}"
+
+    def get_index(self, id_: int) -> int:
+        return self.jumps[self.names[id_]]
 
     def remove_duplicate(self, id1: int|None, id2: int|None = None) -> int:
         match (id1 is None, id2 is None):

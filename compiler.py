@@ -459,6 +459,9 @@ class CodeTransformer(Transformer):
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
 
+        for cmd in final_block:
+            cmd.compute_op()
+
         return final_block
     # --- function call --------------------------
 
@@ -504,5 +507,14 @@ transformed = CodeTransformer().transform(parse_tree)
 
 print("\nAssembly Code:\n")
 
-for i in transformed:
-    print(i)
+index = 0
+for cmd in transformed:
+    if cmd.op == Operand.LABEL:
+        jm.set_pos(cmd.location, index)
+    else:
+        index = index + 1
+    print(cmd)
+
+print("\nMachine Code:\n")
+for cmd in transformed:
+    print(cmd.get_binary(), end="")
