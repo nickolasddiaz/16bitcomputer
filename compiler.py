@@ -2,8 +2,8 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, JumpManager, jm, Ram
-from functools import partialmethod, partial
+from ram import Operand, Command, jm, Ram, ram_var, reg_var, base_pointer, stack_pointer
+from functools import partial
 
 code_parser = Lark(r"""
     ?start: function_definition+
@@ -26,25 +26,23 @@ code_parser = Lark(r"""
         |                  -> empty_args
 
     ?block: assigns 
-        | function_call -> function_call_statement
-        | "return"i return_args -> returnn
+        | "return"i return_args -> _return
 
     ?return_args: expr ("," expr)* -> return_args
                 |                  -> empty_return_args
 
-    ?assigns: single_assign | multiple_assign
 
-    ?single_assign: NAME "=" expr -> assign_var
+    ?assigns: NAME "=" expr -> assign_var
         | NAME "+=" expr -> add_assign_var
         | NAME "-=" expr -> sub_assign_var
         | NAME "*=" expr -> mul_assign_var
         | NAME "/=" expr -> div_assign_var
         | NAME "++" -> increment
         | NAME "--" -> decrement
+        | (assignment_list "=")* function_call -> func_assign
 
-    ?multiple_assign: assignment_list "=" expr -> multiple_assign
 
-    ?assignment_list: NAME ("," NAME)+
+    ?assignment_list: (NAME ",")*
 
     ?compares: expr "==" expr -> compare_equal
         | expr "!=" expr -> compare_not_equal
@@ -72,7 +70,6 @@ code_parser = Lark(r"""
 
     ?atom: var
     | const
-    | function_call
     | "(" expr ")"
 
     ?const: NUMBER -> number
@@ -160,7 +157,8 @@ class CodeTransformer(Transformer):
                     raise ValueError(f"Cannot move an integer {product1} into an integer {product2}"
                                      f"for this operand {op}")
 
-        if isint1 and not isint2: # swap the variables right variable and left int
+        # swap the variables right variable and left int
+        if isint1 and not isint2 and op not in [Operand.DIV, Operand.QUOT]: # these operations are order dependent
             product1, product2 = product2, product1
 
         self.block.append(Command(op, product1, product2))
@@ -381,10 +379,10 @@ class CodeTransformer(Transformer):
         if true_label is not None:
             compare_block.append(CommandLabel(true_label))
 
-        return compare_block + main_block
+        return [CommandInnerStart()] + compare_block + main_block + [CommandInnerEnd()]
 
     def else_statement(self, items: list[list[Command]]) -> tuple[list[Command]]:
-        return (self.list_in_list(items),)
+        return ([CommandInnerStart()] + self.list_in_list(items) + [CommandInnerEnd()],)
 
     def elif_statement(self, items) -> tuple[list[Command]]:
         elif_compare = items[0][0]
@@ -425,7 +423,7 @@ class CodeTransformer(Transformer):
         else:
             jm.remove_duplicate(final_jump_label, final_commands[-1].location)
 
-        return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
+        return final_commands
     
     def list_in_list(self,list_of_lists): # the body of the elif/else statements are in nested lists
         result = []
@@ -441,10 +439,14 @@ class CodeTransformer(Transformer):
         var_all: Ram = Ram()
         function_name: str = items[0]
         function_arguments: list[str] = items[1]
+        var_all.set_arguments(function_arguments)
         main_block: list[Command] = self.list_in_list(items[2:])
 
         function_label = jm.get_function(function_name)
-        final_block = [CommandLabel(function_label)]
+        final_block = [CommandLabel(function_label),
+                       Command(Operand.MOV, ram_var(0), base_pointer()), # push the base_pointer
+                       Command(Operand.MOV, base_pointer(), stack_pointer()), # starting function's frame
+                       ]
 
         var_all.compute_lifetimes(main_block)
 
@@ -455,6 +457,10 @@ class CodeTransformer(Transformer):
                 var_all.inner_end()
             else:
                 final_block.extend(var_all.allocate_command(item, index))
+
+        final_block.extend([Command(Operand.MOV, stack_pointer(), base_pointer()), # cleaning function's frame
+                            Command(Operand.MOV, ram_var(0), base_pointer()) # pop the base_pointer
+                            ])
 
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
@@ -475,14 +481,30 @@ class CodeTransformer(Transformer):
         return items
     
     def function_call(self, items):
-        return [(items[0], items[1])]
-    
-    def multiple_assign(self,items):
-        items[1][0].append_assignment(items[0])
-        return [items[1][0]]
-    
-    def function_call_statement(self, items):
-        return items[0]
+        return items[0], items[1]
+
+    def func_assign(self, items):
+        if len(items) == 2:
+            assign_vars: list[str] = items[0]
+            arguments: list[int|str] = items[1][1]
+            function_name: str = items[1][0]
+        else:
+            assign_vars: list[str] = []
+            arguments: list[int|str] = items[0][1]
+            function_name: str = items[0][0]
+
+        final_commands = [Command(Operand.SET_VARIABLE_MAX)]
+
+        for i, arg in enumerate(arguments): # simulate move the arguments into correct position in reverse order
+            # the -(i +1), is to append it to the front of all the vars, example -3 and the max index of variables is 4, it would be in index 7, so (3 + 4)
+            final_commands.append(Command(Operand.MOV, -(i +1), arg))
+
+        final_commands.append(Command(Operand.CALL,None, None, jm.get_function(function_name)))
+
+        for i, arg in enumerate(assign_vars): # moves the return arguments back to their variable location
+            final_commands.append(Command(Operand.MOV, arg, -(i +1)))
+
+        return final_commands
 
     def empty_return_args(self, items):
         return []
