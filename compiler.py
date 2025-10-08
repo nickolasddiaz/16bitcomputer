@@ -2,7 +2,7 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, jm, Ram, ram_var, reg_var, base_pointer, stack_pointer
+from ram import Operand, Command, jm, Ram, ram_var, reg_var, base_pointer, stack_pointer, shared_rtn
 from functools import partial
 
 code_parser = Lark(r"""
@@ -100,6 +100,7 @@ CommandLabel = partial(Command, Operand.LABEL, None, None)
 CommandJump = partial(Command, Operand.JMP, None, None)
 CommandInnerStart = partial(Command, Operand.INNER_START, None, None, None)
 CommandInnerEnd = partial(Command, Operand.INNER_END, None, None, None)
+CommandReturn = partial(Command, Operand.RETURN_HELPER)
 
 
 class CodeTransformer(Transformer):
@@ -111,7 +112,7 @@ class CodeTransformer(Transformer):
         return temp
 
        # --- var/number functions --------------------------
-    def number(self, n):
+    def NUMBER(self, n):
         return int(n[0])
 
     def hex_number(self, n):
@@ -436,9 +437,9 @@ class CodeTransformer(Transformer):
 
     # --- function declaration --------------------------
     def function_declaration(self, items) -> list[Command]:
-        var_all: Ram = Ram()
         function_name: str = items[0]
         function_arguments: list[str] = items[1]
+        var_all: Ram = Ram(function_name)
         var_all.set_arguments(function_arguments)
         main_block: list[Command] = self.list_in_list(items[2:])
 
@@ -456,11 +457,7 @@ class CodeTransformer(Transformer):
             elif item.op == Operand.INNER_END:
                 var_all.inner_end()
             else:
-                final_block.extend(var_all.allocate_command(item, index))
-
-        final_block.extend([Command(Operand.MOV, stack_pointer(), base_pointer()), # cleaning function's frame
-                            Command(Operand.MOV, ram_var(0), base_pointer()) # pop the base_pointer
-                            ])
+                final_block.extend(var_all.allocate_command(item, index, function_name))
 
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
@@ -493,11 +490,16 @@ class CodeTransformer(Transformer):
             arguments: list[int|str] = items[0][1]
             function_name: str = items[0][0]
 
+        shared_rtn.validate_return(function_name, len(assign_vars))
+        shared_rtn.validate_arg(function_name, len(arguments))
+
+        return_offset: int = shared_rtn.return_count[function_name]
+
         final_commands = [Command(Operand.SET_VARIABLE_MAX)]
 
         for i, arg in enumerate(arguments): # simulate move the arguments into correct position in reverse order
             # the -(i +1), is to append it to the front of all the vars, example -3 and the max index of variables is 4, it would be in index 7, so (3 + 4)
-            final_commands.append(Command(Operand.MOV, -(i +1), arg))
+            final_commands.append(Command(Operand.MOV, -(i + 1 + return_offset), arg))
 
         final_commands.append(Command(Operand.CALL,None, None, jm.get_function(function_name)))
 
@@ -510,9 +512,12 @@ class CodeTransformer(Transformer):
         return []
     def return_args(self, items):
         return items
-    def returnn(self, items):
-        return_items = items[0] if items else []
-        return [('RETURN', None, return_items)]
+    def _return(self, items):
+        return_items: list[str|int] = items[0] if items else []
+        return [CommandReturn(return_items)]
+
+    def start(self, items):
+        return self.list_in_list(items)
 
 
 with open('program.txt', 'r') as file:

@@ -2,6 +2,32 @@ from collections import ChainMap
 from enum import Enum, auto
 from functools import partial
 
+class shared_func:
+    def __init__(self):
+        self.return_count: dict[str, int] = {"main": 0}
+        self.arg_count: dict[str, int] = {"main": 0}
+
+    def validate_return(self, func_name: str, amount_returned):
+        # function validates if all uses of the function returns the same amount
+
+        if func_name not in self.return_count:
+            self.return_count[func_name] = amount_returned
+            return
+
+        if self.return_count[func_name] != amount_returned:
+            raise ValueError(f"{func_name} returned {amount_returned} instead of {self.return_count[func_name]}")
+
+    def validate_arg(self, func_name: str, amount_argument):
+        # function validates if all uses of the function argument the same amount
+
+        if func_name not in self.arg_count:
+            self.arg_count[func_name] = amount_argument
+            return
+
+        if self.arg_count[func_name] != amount_argument:
+            raise ValueError(f"{func_name} had this many {amount_argument} arguments instead of {self.arg_count[func_name]}")
+
+shared_rtn = shared_func()
 
 class ram_var:
     def __init__(self, val: int) -> None:
@@ -113,11 +139,12 @@ class Operand(Enum):
     JC = auto()
     CALL = auto()
     RTRN = auto()
+    # below Operands are helpers
     LABEL = auto()
     INNER_START = auto()
     INNER_END = auto()
-    # this used for the CALL operand where arguments are push and returns are pop
-    SET_VARIABLE_MAX = auto()
+    SET_VARIABLE_MAX = auto() # this used for the CALL operand where arguments are push and returns are pop
+    RETURN_HELPER = auto()
 
     def negate(self):
         if not self.check_jump():
@@ -158,11 +185,11 @@ class Operand(Enum):
 
 
 class Command:
-    def __init__(self, op: Operand, source: int|str|ram_var|reg_var|None = None, dest: int|str|ram_var|reg_var|None = None, location: int = None):
+    def __init__(self, op: Operand, source: int|str|ram_var|reg_var|list[int|str]|None = None, dest: int|str|ram_var|reg_var|None = None, location: int = None):
         self.op: Operand = op
-        self.source: int|str|ram_var|reg_var|None = source
+        self.source: int|str|ram_var|reg_var|list[int|str]|None = source
         self.dest: int|str|ram_var|reg_var|None = dest
-        self.location: int = location
+        self.location: int|list[int|str] = location
 
     def __str__(self) -> str:
         match self.op:
@@ -172,6 +199,8 @@ class Command:
                 return "---\tInner Start ---"
             case Operand.INNER_END:
                 return "---\tInner END   ---"
+            case Operand.RETURN_HELPER:
+                return ""
 
         output = f"\t{self.op.name}"
         if self.source is not None:
@@ -189,7 +218,7 @@ class Command:
         self.op = self.op.correct_op(self.source, self.dest)
 
     def get_binary(self) -> str:
-        if self.op == Operand.LABEL:
+        if self.op in [Operand.LABEL, Operand.RETURN_HELPER]:
             return ""
 
         temp = ""
@@ -223,7 +252,7 @@ class Command:
 
 
 class Ram:
-    def __init__(self):
+    def __init__(self, function_name:str):
         self._ram: ChainMap[str, int] = ChainMap()
         self._lifetimes: dict[str, int] = dict()    # var_name, death
 
@@ -236,7 +265,10 @@ class Ram:
         self.move_temp: int = 0
 
         # this used for the CALL operand where arguments are push and returns are pop
-        self.variable_max = 0
+        self.variable_max: int = 0
+
+        self.return_offset: int = shared_rtn.return_count[function_name] + 1
+
 
     def inner_start(self):
         # this uses chainmap to auto kill any variables that are out of scope
@@ -254,7 +286,11 @@ class Ram:
         self._ram[var_name] = min_num
         return min_num
 
-    def _set_lifetime(self, var_name: str, instruction: int) -> None:
+    def _set_lifetime(self, var_name: str|list[str|int], instruction: int) -> None:
+        if isinstance(var_name, list):
+            for i in var_name:
+                self._set_lifetime(i,instruction)
+
         if var_name is None or var_name == "" or not isinstance(var_name, str):
             return
 
@@ -269,7 +305,7 @@ class Ram:
     def set_arguments(self, args: list[str]) -> None:
         # Set the argument's spots for example def main (a, b) -> (a,1), (b,2)
         for index, arg in enumerate(args):
-            self._ram[arg] = index + 1
+            self._ram[arg] = index + self.return_offset
 
     def compute_lifetimes(self, commands: list[Command]) -> None:
         # loop through each command and sets the number of the last used variable
@@ -284,7 +320,7 @@ class Ram:
     def _get_min(self) -> int:
         # just gets the min of the key that is not used starting at 1
         values = sorted([key for key in self._ram.values()])
-        expected_value = 1
+        expected_value = self.return_offset
         for value in values:
             if value > expected_value:
                 return expected_value
@@ -308,13 +344,45 @@ class Ram:
             return ram_var(self.variable_max + (var * -1))
         return None
 
-    def allocate_command(self, cmd: Command, instruction: int) -> list[Command]:
+    def return_helper(self, source, dest)  -> list[Command]:
+        final_commands = []
+
+        return final_commands
+
+    def allocate_command(self, cmd: Command, instruction: int, function_name:str) -> list[Command]:
         final_cmd: list[Command] = []
+        if cmd.op == Operand.RETURN_HELPER:
+            shared_rtn.validate_return(function_name, len(cmd.source))
+            for index, arg in enumerate(cmd.source):
+                var_location = self._get_var(arg)
+                if var_location is None:
+                    raise ValueError("Initialise the variable before returning it")
+                final_cmd.append(Command(Operand.MOV, ram_var(index+1), ram_var(var_location)))
+
+            final_cmd.extend([Command(Operand.MOV, stack_pointer(), base_pointer()), # cleaning function's frame
+                              Command(Operand.MOV, base_pointer(), ram_var(0)),  # pop the base_pointer
+                              Command(Operand.RTRN)
+                              ])
+            return final_cmd
+
         self._remove_dead_vars(instruction)
 
         if cmd.op == Operand.SET_VARIABLE_MAX:
-            self.variable_max = max(self._ram.values()) + 1
+            if all(not val for val in self._ram.values()):
+                self.variable_max = 0
+            else:
+                self.variable_max = max(self._ram.values()) + 1
             return []
+
+        if cmd.op == Operand.RETURN_HELPER:
+            return self.return_helper(cmd.source, cmd.dest)
+
+        if cmd.op == Operand.CALL:
+            if all(not val for val in self._ram.values()):
+                temp = 1
+            else:
+                temp = max(self._ram.values())+1
+            return [Command(Operand.ADD, stack_pointer(), temp), cmd]
 
         # logic in order to manage the temp variables, when the first temp is used the second one steps in
         if (cmd.op != Operand.MOV and isinstance(cmd.source, str)
