@@ -3,18 +3,32 @@
 
 ## Architecture Overview
 
-This is a Complex Instruction Set Computer (CISC) with microcoded 8-bit opcodes designed and implementation in Logic-SIM.
+This is a Complex Instruction Set Computer (CISC) with microcode 8-bit opcodes designed and implemented in Logic-SIM Evolution.
 
 ## Instruction Formats
-
 ### R-type (Register Operations)
 ```
-[ opcode(8) | reg1(4) + reg2(4) | dest(4) ]
+[ opcode(8) | reg(4) + reg(4) ]
 ```
 
-### I-type (Immediate/Memory Operations)
+### I-type (Immediate Operations)
 ```
-[ opcode(8) | reg(4) | immediate/address(8) ]
+[ opcode(8) | reg(4) | immediate(8) ]
+```
+
+### L-type (RAM Load Operations)
+```
+[ opcode(8) | reg(4) | RAM_addr(8) ]
+```
+
+### RI-type (RAM Immediate Operations)
+```
+[ opcode(8) | RAM_addr(8) | immediate(8) ]
+```
+
+### RR-type (RAM to RAM Operations)
+```
+[ opcode(8) | RAM_addr(8) | RAM_addr(8) ]
 ```
 
 ### J-type (Jumps and Calls)
@@ -24,102 +38,199 @@ This is a Complex Instruction Set Computer (CISC) with microcoded 8-bit opcodes 
 
 ## System Specifications
 
-| Component | Specification |
-|-----------|---------------|
-| **Instruction Memory** | 65,536 instructions |
-| **Registers** | 16 registers (0-15) |
-| **RAM** | 256 × 8-bit |
-| **Video Display** | 256×256 RGB, XTerm256 color model (8-bit) |
-| **Status Register** | Flags: Greater, Equal, Less, Zero, Carry|
-| **Program Counter** | 16-bit |
-| **Call Stack Counter** | 4-bit |
-| **Push/Pop Stack Counter** | 8-bit |
-| **Variable Type** | 8-bit unsigned integer |
+| Component              | Specification                                  |
+|------------------------|------------------------------------------------|
+| **Instruction Memory** | 65,536 instructions - program counter 16-bit   |
+| **Registers**          | 16 registers (0-15)                            |
+| **RAM**                | 256 × 8-bit                                    |
+| **Video Display**      | 16×16 RGB, XTerm256 color model (8-bit)        |
+| **Status Register**    | Flags: Greater, Equal, Less, Zero, Carry       |
+| **Program Counter**    | 16-bit                                         |
+| **Variable Type**      | Only 8-bit unsigned integer 0 - 255/0x0 - 0xFF |
+| **Number of Opcodes**  | 83 (0x00-0x52)                                 |
 
 ## Instruction Set
 
+### System Instructions
+
+| Opcode | Mnemonic | Format | Description   |
+|--------|----------|--------|---------------|
+| `0x00` | `NOP`    | -      | No Operation  |
+| `0x01` | `HALT`   | -      | Halt Computer |
+
+### Video Display Instructions
+
+| Opcode | Mnemonic       | Format | Description             |
+|--------|----------------|--------|-------------------------|
+| `0x02` | `VID`          | -      | Update video display    |
+| `0x03` | `VID_V [addr]` | -      | Set video value (color) |
+| `0x04` | `VID_X [addr]` | -      | Set video X coordinate  |
+| `0x05` | `VID_Y [addr]` | -      | Set video Y coordinate  |
+
 ### Data Movement Instructions
 
-| Opcode | Mnemonic | Format | Description |
-|--------|----------|--------|-------------|
-| `0x00` | `NOP` | - | No Operation |
-| `0x01` | `HALT` | - | Halt Computer |
-| `0x02` | `LD rd, [addr]` | I | Load byte from RAM into register |
-| `0x03` | `ST rs, [addr]` | I | Store byte from register into RAM |
-| `0x04` | `MOV rd, rs` | R | Copy register to register rs moves into rd|
-| `0x05` | `LI rd, imm8` | I | Load immediate value to register |
-| `0x06` | `VID` | - | Load RGB video  x cord RF, y cord RE, and value XTERM 256 from RD|
+| Opcode | Mnemonic                | Format | Description                  |
+|--------|-------------------------|--------|------------------------------|
+| `0x06` | `MOV reg, reg`          | R      | Move register to register    |
+| `0x07` | `MOV_R [addr], reg`     | R      | Move RAM to register         |
+| `0x08` | `MOV_I reg, imm8`       | I      | Move immediate to register   |
+| `0x09` | `MOV_L r, [addr]`       | L      | Move register to RAM address |
+| `0x0A` | `MOV_RI [addr], imm8`   | RI     | Move immediate to RAM        |
+| `0x0B` | `MOV_RR [addr], [addr]` | RR     | Move RAM to RAM              |
 
-### Arithmetic and Logic Instructions
+### Comparison Instructions
 
-#### Register-Register Operations
-| Opcode | Mnemonic | Format | Description |
-|--------|----------|--------|-------------|
-| `0x07` | `ADD rd, rs, rt` | R | Addition: rd = rs + rt |
-| `0x08` | `SUB rd, rs, rt` | R | Subtraction: rd = rs - rt |
-| `0x09` | `MULT rd, rs, rt` | R | Multiplication: rd = rs × rt |
-| `0x0A` | `DIV rd, rs, rt` | R | Division: rd = rs ÷ rt |
-| `0x0B` | `QUOT rd, rs, rt` | R | Quotient: rd = rs mod rt |
-| `0x0C` | `AND rd, rs, rt` | R | Bitwise AND: rd = rs & rt |
-| `0x0D` | `OR rd, rs, rt` | R | Bitwise OR: rd = rs \| rt |
-| `0x0E` | `XOR rd, rs, rt` | R | Bitwise XOR: rd = rs ^ rt |
-| `0x0F` | `NOT rd, rs` | R | Bitwise NOT: rd = ~rs |
-| `0x10` | `SHL rd, rs, rt` | R | Logical shift left: rd = rs << rt |
-| `0x11` | `SHR rd, rs, rt` | R | Logical shift right: rd = rs >> rt |
-| `0x12` | `RR rd, rs, rt` | R | Rotate right: rd = ror(rs, rt) |
-| `0x13` | `RL rd, rs, rt` | R | Rotate left: rd = rol(rs, rt) |
-| `0x14` | `AR rd, rs, rt` | R | Arithmetic right shift: rd = ars(rs, rt) |
+| Opcode | Mnemonic            | Format | Description                        |
+|--------|---------------------|--------|------------------------------------|
+| `0x0C` | `CMP reg, reg`      | R      | Compare two registers (sets flags) |
+| `0x0D` | `CMP_R [addr], reg` | R      | Compare RAM with register          |
+| `0x0E` | `CMP_I reg, imm8`   | I      | Compare register with immediate    |
+| `0x0F` | `CMP_L reg, [addr]` | L      | Compare register with RAM          |
 
-#### Immediate Operations
-| Opcode | Mnemonic | Format | Description |
-|--------|----------|--------|-------------|
-| `0x15` | `ADDI rd, rt, imm8` | I | Add immediate: rd = rs + imm8 |
-| `0x16` | `SUBI rd, rt, imm8` | I | Subtract immediate: rd = rs - imm8 |
-| `0x17` | `MULTI rd, rt, imm8` | I | Multiply immediate: rd = rs × imm8 |
-| `0x18` | `DIVI rd, rt, imm8` | I | Divide immediate: rd = rs ÷ imm8 |
-| `0x19` | `QUOTI rd, rt, imm8` | I | Quotient immediate: rd = rs mod imm8 |
-| `0x1A` | `ANDI rd, rt, imm8` | I | AND immediate: rd = rs & imm8 |
-| `0x1B` | `ORI rd, rt, imm8` | I | OR immediate: rd = rs \| imm8 |
-| `0x1C` | `XORI rd, rt, imm8` | I | XOR immediate: rd = rs ^ imm8 |
-| `0x1D` | `NOTI rd, imm8` | I | NOT immediate: rd = ~imm8 |
-| `0x1E` | `SHLI rd, rt, imm8` | I | Shift left immediate: rd = rs << imm8 |
-| `0x1F` | `SHRI rd, rt, imm8` | I | Shift right immediate: rd = rs >> imm8 |
-| `0x20` | `RRI rd, rt, imm8` | I | Rotate right immediate: rd = ror(rt, imm8) |
-| `0x21` | `RLI rd, rt, imm8` | I | Rotate left immediate: rd = rol(rt, imm8) |
-| `0x22` | `ARI rd, rt, imm8` | I | Arithmetic right immediate: rd = ars(rt, imm8) |
-| `0x23` | `INC rd, rt` | - | Increment a register: rd++ |
-| `0x24` | `DEC rd, rt` | - | Decrement a register: rd-- |
+### Arithmetic Instructions
+
+#### Addition
+| Opcode | Mnemonic            | Format | Description              |
+|--------|---------------------|--------|--------------------------|
+| `0x10` | `ADD reg, reg`      | R      | input1 = input1 + input2 |
+| `0x11` | `ADD_R reg, [addr]` | R      |                          |
+| `0x12` | `ADD_I reg, imm8`   | I      |                          |
+| `0x13` | `ADD_L [addr], reg` | L      |                          |
+
+#### Subtraction
+| Opcode | Mnemonic            | Format | Description              |
+|--------|---------------------|--------|--------------------------|
+| `0x14` | `SUB reg, reg`      | R      | input1 = input1 - input2 |
+| `0x15` | `SUB_R reg, [addr]` | R      |                          |
+| `0x16` | `SUB_I reg, imm8`   | I      |                          |
+| `0x17` | `SUB_L [addr], reg` | L      |                          |
+
+#### Multiplication
+| Opcode | Mnemonic             | Format | Description              |
+|--------|----------------------|--------|--------------------------|
+| `0x18` | `MULT reg, reg`      | R      | input1 = input1 * input2 |
+| `0x19` | `MUL_R reg, [addr]`  | R      |                          |
+| `0x1A` | `MULT_I reg, imm8`   | I      |                          |
+| `0x1B` | `MULT_L [addr], reg` | L      |                          |
+
+#### Division
+| Opcode | Mnemonic            | Format | Description              |
+|--------|---------------------|--------|--------------------------|
+| `0x1C` | `DIV reg, reg`      | R      | input1 = input1 / input2 |
+| `0x1D` | `DIV_R reg, [addr]` | R      |                          |
+| `0x1E` | `DIV_I reg, imm8`   | I      |                          |
+| `0x1F` | `DIV_L [addr], reg` | L      |                          |
+
+#### Modulo/Quotient
+| Opcode | Mnemonic             | Format | Description                |
+|--------|----------------------|--------|----------------------------|
+| `0x20` | `QUOT reg, reg`      | R      | input1 = input1 mod input2 |
+| `0x21` | `QUOT_R reg, [addr]` | R      |                            |
+| `0x22` | `QUOT_I reg, imm8`   | I      |                            |
+| `0x23` | `QUOT_L [addr], reg` | L      |                            |
+
+### Bitwise Logic Instructions
+
+#### AND Operations
+| Opcode | Mnemonic            | Format | Description                    |
+|--------|---------------------|--------|--------------------------------|
+| `0x24` | `AND reg`           | R      | input1 = input1 bit and input2 |
+| `0x25` | `AND_R reg, [addr]` | R      |                                |
+| `0x26` | `AND_I reg, imm8`   | I      |                                |
+| `0x27` | `AND_L [addr], reg` | L      |                                |
+
+#### OR Operations
+| Opcode | Mnemonic           | Format | Description                   |
+|--------|--------------------|--------|-------------------------------|
+| `0x28` | `OR reg, reg`      | R      | input1 = input1 bit or input2 |
+| `0x29` | `OR_R reg, [addr]` | R      |                               |
+| `0x2A` | `OR_I reg, imm8`   | I      |                               |
+| `0x2B` | `OR_L [addr], reg` | L      |                               |
+
+#### XOR Operations
+| Opcode | Mnemonic            | Format | Description                    |
+|--------|---------------------|--------|--------------------------------|
+| `0x2C` | `XOR reg, reg`      | R      | input1 = input1 bit xor input2 |
+| `0x2D` | `XOR_R reg, [addr]` | R      |                                |
+| `0x2E` | `XOR_I reg, imm8`   | I      |                                |
+| `0x2F` | `XOR_L [addr], reg` | L      |                                |
+
+### Shift and Rotate Instructions
+
+#### Shift Left
+| Opcode | Mnemonic            | Format | Description                       |
+|--------|---------------------|--------|-----------------------------------|
+| `0x30` | `SHL reg, reg`      | R      | input1 = input1 shift left input2 |
+| `0x31` | `SHL_R reg, [addr]` | R      |                                   |
+| `0x32` | `SHL_I reg, imm8`   | I      |                                   |
+| `0x33` | `SHL_L [addr], reg` | L      |                                   |
+
+#### Shift Right
+| Opcode | Mnemonic            | Format | Description                        |
+|--------|---------------------|--------|------------------------------------|
+| `0x34` | `SHR reg, reg`      | R      | input1 = input1 shift right input2 |
+| `0x35` | `SHR_R reg, [addr]` | R      |                                    |
+| `0x36` | `SHR_I reg, imm8`   | I      |                                    |
+| `0x37` | `SHR_L [addr], reg` | L      |                                    |
+
+#### Rotate Right
+| Opcode | Mnemonic           | Format | Description                         |
+|--------|--------------------|--------|-------------------------------------|
+| `0x38` | `RR reg, reg`      | R      | input1 = input1 rotate right input2 |
+| `0x39` | `RR_R reg, [addr]` | R      |                                     |
+| `0x3A` | `RR_I reg, imm8`   | I      |                                     |
+| `0x3B` | `RR_L [addr], reg` | L      |                                     |
+
+#### Rotate Left
+| Opcode | Mnemonic           | Format | Description                        |
+|--------|--------------------|--------|------------------------------------|
+| `0x3C` | `RL reg, reg`      | R      | input1 = input1 rotate left input2 |
+| `0x3D` | `RL_R reg, [addr]` | R      |                                    |
+| `0x3E` | `RL_I reg, imm8`   | I      |                                    |
+| `0x3F` | `RL_L [addr], reg` | L      |                                    |
+
+#### Arithmetic Right Shift
+| Opcode | Mnemonic           | Format | Description                                   |
+|--------|--------------------|--------|-----------------------------------------------|
+| `0x40` | `AR reg, reg`      | R      | input1 = input1 arithmetic right shift input2 |
+| `0x41` | `AR_R reg, [addr]` | R      |                                               |
+| `0x42` | `AR_I reg, imm8`   | I      |                                               |
+| `0x43` | `AR_L [addr], reg` | L      |                                               |
+
+### NOT Operations
+| Opcode | Mnemonic       | Format | Description            |
+|--------|----------------|--------|------------------------|
+| `0x44` | `NOT reg`      | R      | input1 = negate input1 |
+| `0x45` | `NOT_R [addr]` | R      |                        |
 
 ### Control Flow Instructions
 
-| Opcode | Mnemonic | Format | Description |
-|--------|----------|--------|-------------|
-| `0x25` | `JMP addr` | J | Unconditional jump to 16-bit address |
-| `0x26` | `JEQ addr` | J | Jump if equal flag set |
-| `0x27` | `JNE addr` | J | Jump if not equal |
-| `0x28` | `JG addr` | J | Jump if greater |
-| `0x29` | `JL addr` | J | Jump if less |
-| `0x2A` | `JGE addr` | J | Jump if greater or equal |
-| `0x2B` | `JLE addr` | J | Jump if less or equal |
-| `0x2C` | `JNZ addr` | J | Jump if zero flag not set |
-| `0x2D` | `JZ addr` | J | Jump if zero flag set |
-| `0x2E` | `JNC addr` | J | Jump if carry flag not set |
-| `0x2F` | `JC addr` | J | Jump if carry flag set |
-| `0x30` | `CALL addr` | J | Push return address, jump to subroutine |
-| `0x31` | `RTRN` | - | Pop return address into PC |
-| `0x32` | `PUSH rd` | - | Push the stack |
-| `0x33` | `POP rd` | - | Pop the stack |
-| `0x34` | `CMP rs, rt` | R | Compare registers (sets flags) |
-| `0x35` | `CMPI rs, imm8` | I | Compare immediate (sets flags) |
+#### Jump Instructions
+| Opcode | Mnemonic         | Format | Description                          |
+|--------|------------------|--------|--------------------------------------|
+| `0x46` | `JMP imm8, imm8` | J      | Unconditional jump to 16-bit address |
+| `0x47` | `JEQ imm8, imm8` | J      | Jump if equal flag set               |
+| `0x48` | `JNE imm8, imm8` | J      | Jump if not equal                    |
+| `0x49` | `JG imm8, imm8`  | J      | Jump if greater                      |
+| `0x4A` | `JLE imm8, imm8` | J      | Jump if less or equal                |
+| `0x4B` | `JL imm8, imm8`  | J      | Jump if less                         |
+| `0x4C` | `JGE imm8, imm8` | J      | Jump if greater or equal             |
+| `0x4D` | `JNZ imm8, imm8` | J      | Jump if zero flag not set            |
+| `0x4E` | `JZ imm8, imm8`  | J      | Jump if zero flag set                |
+| `0x4F` | `JNC imm8, imm8` | J      | Jump if carry flag not set           |
+| `0x50` | `JC imm8, imm8`  | J      | Jump if carry flag set               |
+
+#### Subroutine Instructions
+| Opcode | Mnemonic          | Format | Description                             |
+|--------|-------------------|--------|-----------------------------------------|
+| `0x51` | `CALL imm8, imm8` | J      | Push return address, jump to subroutine |
+| `0x52` | `RTRN`            | -      | Pop return address into PC              |
 
 ## Register Conventions
 
-| Register | Purpose | Notes |
-|----------|---------|-------|
-| R0-RC | General Purpose | Available for computation and data storage |
-| RD | Special | Used by VID instruction for XTerm256 color model (8-bit) |
-| RE | Special | Used by VID instruction for video y axis |
-| RF | Special | Used by VID instruction for video x axis |
+| Register | Purpose         | Notes                                      |
+|----------|-----------------|--------------------------------------------|
+| R0-RF    | General Purpose | Available for computation and data storage |
 
 ## Status Flags
 
@@ -128,3 +239,12 @@ This is a Complex Instruction Set Computer (CISC) with microcoded 8-bit opcodes 
 - **Less (L)**: Set when first operand < second operand  
 - **Zero (Z)**: Set when result equals zero
 - **Carry (C)**: Set when arithmetic operation produces carry
+
+## Operand Format Suffixes
+
+- **(none)**: Register-Register operations
+- **_R**: RAM-Register operations
+- **_I**: Register-Immediate operations
+- **_L**: Register-RAM (Load) operations
+- **_RI**: RAM-Immediate operations
+- **_RR**: RAM-RAM operations
