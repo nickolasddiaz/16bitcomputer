@@ -2,7 +2,7 @@ from collections import ChainMap
 from enum import Enum, auto
 from functools import partial
 
-class shared_func:
+class Shared_Func:
     def __init__(self):
         self.return_count: dict[str, int] = {"main": 0}
         self.arg_count: dict[str, int] = {"main": 0}
@@ -27,9 +27,9 @@ class shared_func:
         if self.arg_count[func_name] != amount_argument:
             raise ValueError(f"{func_name} had this many {amount_argument} arguments instead of {self.arg_count[func_name]}")
 
-shared_rtn = shared_func()
+shared_rtn = Shared_Func()
 
-class ram_var:
+class Ram_Var:
     def __init__(self, val: int) -> None:
         self.val: int = val
     def __str__(self) -> str:
@@ -145,6 +145,7 @@ class Operand(Enum):
     INNER_END = auto()
     SET_VARIABLE_MAX = auto() # this used for the CALL operand where arguments are push and returns are pop
     RETURN_HELPER = auto()
+    CALL_HELPER = auto()
 
     def negate(self):
         if not self.check_jump():
@@ -166,15 +167,15 @@ class Operand(Enum):
         match (source, dest):
             case reg_var(), reg_var():
                 return self
-            case ram_var(), reg_var():
+            case Ram_Var(), reg_var():
                 return Operand(self.value + 1)
             case reg_var(), int():
                 return Operand(self.value + 2)
-            case reg_var(), ram_var():
+            case reg_var(), Ram_Var():
                 return Operand(self.value + 3)
-            case ram_var(), int():
+            case Ram_Var(), int():
                 return Operand(self.value + 4)
-            case ram_var(), ram_var():
+            case Ram_Var(), Ram_Var():
                 return Operand(self.value + 5)
 
     def check_jump(self):
@@ -185,11 +186,12 @@ class Operand(Enum):
 
 
 class Command:
-    def __init__(self, op: Operand, source: int|str|ram_var|reg_var|list[int|str]|None = None, dest: int|str|ram_var|reg_var|None = None, location: int = None):
+    def __init__(self, op: Operand, source: int | str | Ram_Var | reg_var | list[int | str] | None = None, dest: int | str | Ram_Var | reg_var | None = None, location: int = None):
         self.op: Operand = op
-        self.source: int|str|ram_var|reg_var|list[int|str]|None = source
-        self.dest: int|str|ram_var|reg_var|None = dest
-        self.location: int|list[int|str] = location
+        self.source: int | str | Ram_Var | reg_var | list[int | str] | None = source
+        self.dest: int | str | Ram_Var | reg_var | list[int | str] |  None = dest
+        self.location: int = location
+        self.other: str = ""
 
     def __str__(self) -> str:
         match self.op:
@@ -226,13 +228,13 @@ class Command:
         if isinstance(self.source, reg_var) and isinstance(self.dest, reg_var):
             binary += f"{self.source.val:01x}{self.source.val:01x}"
         else:
-            if isinstance(self.source, ram_var):
+            if isinstance(self.source, Ram_Var):
                 temp = self.number_hex(self.source.val)
             elif isinstance(self.source, int):
                 temp = self.number_hex(self.source)
             if temp is not None:
                 binary += temp
-            if isinstance(self.dest, ram_var):
+            if isinstance(self.dest, Ram_Var):
                 temp = self.number_hex(self.dest.val)
             elif isinstance(self.dest, int):
                 temp = self.number_hex(self.dest)
@@ -248,6 +250,8 @@ class Command:
 
     @staticmethod
     def number_hex(num: int) -> str:
+        if 0 <= num >= 0xFF:  # check if input is between 0-255
+            raise ValueError(f"Number {num} out of range, valid range is 0 - 255")
         return f"{num:02x}"
 
 
@@ -336,18 +340,13 @@ class Ram:
             elif var_location is None: # case where var does not exist
                 if op != Operand.MOV: # only MOV can create variables
                     raise ValueError("Initialise the variable before using it")
-                return ram_var(self._set_var(var))
+                return Ram_Var(self._set_var(var))
             else:
-                return ram_var(var_location) # case where var exists
+                return Ram_Var(var_location) # case where var exists
         elif isinstance(var, int) and var < 0: # case where var is int and is negative
             # the -(i +1), is to append it to the front of all the vars, example -3 and the max index of variables is 4, it would be in index 7, so (3 + 4)
-            return ram_var(self.variable_max + (var * -1))
+            return Ram_Var(self.variable_max + (var * -1))
         return None
-
-    def return_helper(self, source, dest)  -> list[Command]:
-        final_commands = []
-
-        return final_commands
 
     def allocate_command(self, cmd: Command, instruction: int, function_name:str) -> list[Command]:
         final_cmd: list[Command] = []
@@ -357,10 +356,10 @@ class Ram:
                 var_location = self._get_var(arg)
                 if var_location is None:
                     raise ValueError("Initialise the variable before returning it")
-                final_cmd.append(Command(Operand.MOV, ram_var(index+1), ram_var(var_location)))
+                final_cmd.append(Command(Operand.MOV, Ram_Var(index + 1), Ram_Var(var_location)))
 
-            final_cmd.extend([Command(Operand.MOV, stack_pointer(), base_pointer()), # cleaning function's frame
-                              Command(Operand.MOV, base_pointer(), ram_var(0)),  # pop the base_pointer
+            final_cmd.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
+                              Command(Operand.MOV, base_pointer(), Ram_Var(0)),  # pop the base_pointer
                               Command(Operand.RTRN)
                               ])
             return final_cmd
@@ -374,9 +373,6 @@ class Ram:
                 self.variable_max = max(self._ram.values()) + 1
             return []
 
-        if cmd.op == Operand.RETURN_HELPER:
-            return self.return_helper(cmd.source, cmd.dest)
-
         if cmd.op == Operand.CALL:
             if all(not val for val in self._ram.values()):
                 temp = 1
@@ -385,12 +381,12 @@ class Ram:
             return [Command(Operand.ADD, stack_pointer(), temp), cmd]
 
         # logic in order to manage the temp variables, when the first temp is used the second one steps in
-        if (cmd.op != Operand.MOV and isinstance(cmd.source, str)
+        if (cmd.op not in [Operand.MOV, Operand.NOT] and isinstance(cmd.source, str)
                 and isinstance(cmd.dest, str) and cmd.source != ""):
             self.move_temp += 1
             if self.move_temp >= 2:
                 self.temp_used = 1
-        if cmd.dest == "" or cmd.op == Operand.CMP:
+        if (cmd.op != Operand.NOT and cmd.dest == "") or cmd.op == Operand.CMP:
             self.move_temp = 0
             self.temp_used = 0
 
@@ -415,8 +411,8 @@ class Ram:
         # MOV, ax, 6
         # DIV, ax, b
         # MOV, a, ax
-        if  ((isinstance(cmd.source, ram_var) or isinstance(cmd.source, int)) and
-                (isinstance(cmd.dest, ram_var) or isinstance(cmd.dest, int)) and
+        if  ((isinstance(cmd.source, Ram_Var) or isinstance(cmd.source, int)) and
+                (isinstance(cmd.dest, Ram_Var) or isinstance(cmd.dest, int)) and
                 cmd.op != Operand.MOV):
 
             final_cmd.append(Command(Operand.MOV, reg_var(self.temp_used), cmd.source))

@@ -2,84 +2,80 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, jm, Ram, ram_var, reg_var, base_pointer, stack_pointer, shared_rtn
+from ram import Operand, Command, jm, Ram, Ram_Var, reg_var, base_pointer, stack_pointer, shared_rtn
 from functools import partial
+import heapq
+
 
 code_parser = Lark(r"""
     ?start: function_definition+
 
-    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block+ "}"-> function_declaration
-
+    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block+ "}" -> function_declaration
+    
     ?inline_block: statements
         | block ";"
-
+    
     ?statements: "for"i "(" assigns ";" compares ";" assigns ")" "{" inline_block+ "}" -> for_loop
-        | "while"i "(" compares ")" "{" inline_block+ "}"          -> while_loop
+        | "while"i "(" compares ")" "{" inline_block+ "}" -> while_loop
         | "if"i "(" compares ")" "{" inline_block+ "}" elif_statement* else_statement? -> if_statement
-        | "do"i "{" inline_block+ "}" "while"i "(" compares ");"-> do_while_loop
-
+        | "do"i "{" inline_block+ "}" "while"i "(" compares ")" ";" -> do_while_loop
+    
     ?elif_statement: "elif"i "(" compares ")" "{" inline_block+ "}" -> elif_statement
-
+    
     ?else_statement: "else"i "{" inline_block+ "}" -> else_statement
-
+    
     ?args: (NAME|NUMBER) ("," (NAME|NUMBER))* -> args
-        |                  -> empty_args
-
+        | -> empty_args
+    
     ?block: assigns 
         | "return"i return_args -> _return
-
-    ?return_args: expr ("," expr)* -> return_args
-                |                  -> empty_return_args
-
-
-    ?assigns: NAME "=" expr -> assign_var
-        | NAME "+=" expr -> add_assign_var
-        | NAME "-=" expr -> sub_assign_var
-        | NAME "*=" expr -> mul_assign_var
-        | NAME "/=" expr -> div_assign_var
+    
+    ?return_args: sum ("," sum)* -> return_args
+        | -> empty_return_args
+    
+    ?assigns: NAME "=" sum -> assign_var
+        | NAME "+=" sum -> add_assign_var
+        | NAME "-=" sum -> sub_assign_var
+        | NAME "*=" sum -> mul_assign_var
+        | NAME "/=" sum -> div_assign_var
         | NAME "++" -> increment
         | NAME "--" -> decrement
-        | (assignment_list "=")* function_call -> func_assign
-
-
-    ?assignment_list: (NAME ",")*
-
-    ?compares: expr "==" expr -> compare_equal
-        | expr "!=" expr -> compare_not_equal
-        | expr ">=" expr -> compare_greater_equal
-        | expr "<=" expr -> compare_less_equal
-        | expr ">" expr -> compare_greater
-        | expr "<" expr -> compare_less
+        | list_assign "=" sum (","sum)* -> multi_assign_var
+        | function_call
+    
+    ?list_assign: NAME (","NAME)+
+    
+    ?compares: sum "==" sum -> compare_equal
+        | sum "!=" sum -> compare_not_equal
+        | sum ">=" sum -> compare_greater_equal
+        | sum "<=" sum -> compare_less_equal
+        | sum ">" sum -> compare_greater
+        | sum "<" sum -> compare_less
         | compares ("&&"|"and"i) compares -> and_compare
         | compares ("||"|"or"i) compares -> or_compare
         | "(" compares ")"
-
-    ?expr: sum
-
+    
     ?sum: product
         | sum "+" product -> add
         | sum "-" product -> sub
-        | product "&" atom -> bit_and
-        | product "|" atom -> bit_or
-        | product "^" atom -> bit_xor
-
+    
     ?product: atom
         | product "*" atom -> mult
         | product "/" atom -> div
         | product "%" atom -> quot
-
-    ?atom: var
-    | const
-    | "(" expr ")"
-
-    ?const: NUMBER -> number
+        | product "&" atom -> bit_and
+        | product "|" atom -> bit_or
+        | product "^" atom -> bit_xor
+    
+    ?atom: NUMBER -> number
         | HEX -> hex_number
-
-    ?var: NAME -> var
-        | "~" var -> nott
-
+        | NAME -> var
+        | function_call
+        | "~" atom -> bit_not
+        | "(" sum ")"
+    
     ?function_call: NAME "(" args ")" -> function_call
-
+    
     %import common.CNAME -> NAME
     %import common.NUMBER
     %import common.WS_INLINE
@@ -103,16 +99,29 @@ CommandInnerEnd = partial(Command, Operand.INNER_END, None, None, None)
 CommandReturn = partial(Command, Operand.RETURN_HELPER)
 
 
-class CodeTransformer(Transformer):
+class temp_helper:
     def __init__(self):
-        self.block = []
-    def getblock(self):
-        temp = self.block
-        self.block = []
-        return temp
+        self._dead_temp: list[int] = [0]
+        heapq.heapify(self._dead_temp)
+
+    def del_var(self, var: int):
+        heapq.heappush(self._dead_temp, var)
+
+    def app_var(self) -> str:
+        temp = heapq.heappop(self._dead_temp)
+        if not self._dead_temp:
+            heapq.heappush(self._dead_temp, temp + 1)
+        return f"#{temp}"
+
+temp_help = temp_helper()
+
+class CodeTransformer(Transformer):
 
        # --- var/number functions --------------------------
     def NUMBER(self, n):
+        return int(n)
+
+    def number(self, n):
         return int(n[0])
 
     def hex_number(self, n):
@@ -125,14 +134,28 @@ class CodeTransformer(Transformer):
         return value
 
     def NAME(self, name):
-        return name.value
+        return f"{name.value}_"
 
     def nop(self, items):
         return ('NOP',),
+
+    def bit_not(self, items):
+        return items[0],[Command(Operand.NOT, items[0])]
+
     # --- product functions --------------------------
-    def product_helper(self, product1: int|str, product2: int|str, op: Operand, swap:bool = False) -> int|str:
-        if swap and product2 == "":
-            product1, product2 = product2, product1
+    def product_helper(self, input1: int|str|tuple[str,list[Command]], input2: int|str|tuple[str,list[Command]], op: Operand) -> int|str|tuple[int | str, list[Command]]:
+        final_commands = []
+        if isinstance(input1, tuple):
+            final_commands.extend(input1[1])
+            product1 = input1[0]
+        else:
+            product1 = input1
+
+        if isinstance(input2, tuple):
+            final_commands.extend(input2[1])
+            product2 = input2[0]
+        else:
+            product2 = input2
 
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
@@ -155,18 +178,35 @@ class CodeTransformer(Transformer):
                 case Operand.XOR:
                     return product1 ^ product2
                 case _:
-                    raise ValueError(f"Cannot move an integer {product1} into an integer {product2}"
-                                     f"for this operand {op}")
+                    raise ValueError(f"Cannot move an integer {product1} into an integer {product2} for this operand {op}")
 
-        # swap the variables right variable and left int
-        if isint1 and not isint2 and op not in [Operand.DIV, Operand.QUOT]: # these operations are order dependent
-            product1, product2 = product2, product1
+        is_temp1 = isinstance(product1, str) and product1[0] == "#"
+        is_temp2 = isinstance(product2, str) and product2[0] == "#"
+        return_var = ""
 
-        self.block.append(Command(op, product1, product2))
-        return ""
+        match (is_temp1, is_temp2):
+            case True, True:
+                temp_help.del_var(int(product2[1:]))
+                final_commands.append(Command(op, product1, product2))
+                return_var = product1
+            case False, True:
+                temp_help.del_var(int(product2[1:]))
+                final_commands.append(Command(op, product2, product1))
+                return_var = product2
+            case True, False:
+                final_commands.append(Command(op, product1, product2))
+                return_var = product1
+            case False, False:
+                temp_var = temp_help.app_var()
+                final_commands.append(Command(Operand.MOV, temp_var, product1))
+                final_commands.append(Command(op, temp_var, product2))
+                return_var = temp_var
+
+
+        return return_var, final_commands
 
     def add(self, items):
-        return self.product_helper(items[0], items[1], Operand.ADD, True)
+        return self.product_helper(items[0], items[1], Operand.ADD)
     def sub(self, items):
         return self.product_helper(items[0], items[1], Operand.SUB)
     def bit_and(self, items):
@@ -176,7 +216,7 @@ class CodeTransformer(Transformer):
     def bit_xor(self, items):
         return self.product_helper(items[0], items[1], Operand.XOR)
     def mult(self, items):
-        return self.product_helper(items[0], items[1], Operand.MULT, True)
+        return self.product_helper(items[0], items[1], Operand.MULT)
     def div(self, items):
         return self.product_helper(items[0], items[1], Operand.DIV)
     def quot(self, items):
@@ -193,8 +233,11 @@ class CodeTransformer(Transformer):
 
     
     def assign_var(self, items):
-        self.product_helper(items[0], items[1], Operand.MOV)
-        return self.getblock()
+        temp = self.product_helper(items[0], items[1], Operand.MOV)
+        for i in temp[1]:
+            print(i)
+        raise ValueError(temp)
+        return temp[1] + [Command(Operand.MOV, temp[0], temp[1])]
     
     def add_assign_var(self, items):
         self.product_helper(items[0], items[1], Operand.ADD)
@@ -445,30 +488,30 @@ class CodeTransformer(Transformer):
 
         function_label = jm.get_function(function_name)
         final_block = [CommandLabel(function_label),
-                       Command(Operand.MOV, ram_var(0), base_pointer()), # push the base_pointer
-                       Command(Operand.MOV, base_pointer(), stack_pointer()), # starting function's frame
+                       Command(Operand.MOV, Ram_Var(0), base_pointer()),  # push the base_pointer
+                       Command(Operand.MOV, base_pointer(), stack_pointer()),  # starting function's frame
                        ]
 
         var_all.compute_lifetimes(main_block)
 
-        for index, item in enumerate(main_block, start=0):
+        for i, item in enumerate(main_block, start=0):
             if item.op == Operand.INNER_START:
                 var_all.inner_start()
             elif item.op == Operand.INNER_END:
                 var_all.inner_end()
             else:
-                final_block.extend(var_all.allocate_command(item, index, function_name))
+                final_block.extend(var_all.allocate_command(item, i, function_name))
 
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
 
-        for cmd in final_block:
-            cmd.compute_op()
+        for command in final_block:
+            command.compute_op()
 
         return final_block
     # --- function call --------------------------
 
-    def assignment_list(self, items):
+    def list_assign(self, items):
         return items
     
     def empty_args(self, items):
@@ -478,35 +521,9 @@ class CodeTransformer(Transformer):
         return items
     
     def function_call(self, items):
-        return items[0], items[1]
-
-    def func_assign(self, items):
-        if len(items) == 2:
-            assign_vars: list[str] = items[0]
-            arguments: list[int|str] = items[1][1]
-            function_name: str = items[1][0]
-        else:
-            assign_vars: list[str] = []
-            arguments: list[int|str] = items[0][1]
-            function_name: str = items[0][0]
-
-        shared_rtn.validate_return(function_name, len(assign_vars))
-        shared_rtn.validate_arg(function_name, len(arguments))
-
-        return_offset: int = shared_rtn.return_count[function_name]
-
-        final_commands = [Command(Operand.SET_VARIABLE_MAX)]
-
-        for i, arg in enumerate(arguments): # simulate move the arguments into correct position in reverse order
-            # the -(i +1), is to append it to the front of all the vars, example -3 and the max index of variables is 4, it would be in index 7, so (3 + 4)
-            final_commands.append(Command(Operand.MOV, -(i + 1 + return_offset), arg))
-
-        final_commands.append(Command(Operand.CALL,None, None, jm.get_function(function_name)))
-
-        for i, arg in enumerate(assign_vars): # moves the return arguments back to their variable location
-            final_commands.append(Command(Operand.MOV, arg, -(i +1)))
-
-        return final_commands
+        temp = Command(Operand.CALL_HELPER, [], items[1])
+        temp.other = items[0] # the name of the function
+        return temp
 
     def empty_return_args(self, items):
         return []
@@ -516,6 +533,30 @@ class CodeTransformer(Transformer):
         return_items: list[str|int] = items[0] if items else []
         return [CommandReturn(return_items)]
 
+    def multi_assign_var(self, items) -> list[Command]:
+        to_assign: list[str] = items[0]
+        from_assign: list[int|str|tuple|Command] = items[1:]
+        if len(to_assign) < len(from_assign):
+            raise SyntaxError(f"Too few arguments: {to_assign}")
+        size_function: int = len(to_assign) - len(from_assign) +1
+
+        final_commands = []
+        to_offset = 0
+        for index, assign in enumerate(from_assign):
+            match(assign):
+                case int()| str():
+                    final_commands.append(Command(Operand.MOV, to_assign[index + to_offset], assign))
+                case tuple():
+                    final_commands.extend(assign[1])
+                    final_commands.append(Command(Operand.MOV, to_assign[index + to_offset], assign[0]))
+                case Command():
+                    assign.source = to_assign[index + to_offset: index + to_offset + size_function]
+                    if size_function != 1:
+                        to_offset = size_function -1
+                        size_function = 1
+                    final_commands.append(assign)
+
+        return final_commands
     def start(self, items):
         return self.list_in_list(items)
 
