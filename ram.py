@@ -2,7 +2,11 @@ from collections import ChainMap
 from enum import Enum, auto
 from functools import partial
 
-class Shared_Func:
+
+
+temp_identifier = "#"
+
+class SharedFunc:
     def __init__(self):
         self.return_count: dict[str, int] = {"main": 0}
         self.arg_count: dict[str, int] = {"main": 0}
@@ -27,15 +31,15 @@ class Shared_Func:
         if self.arg_count[func_name] != amount_argument:
             raise ValueError(f"{func_name} had this many {amount_argument} arguments instead of {self.arg_count[func_name]}")
 
-shared_rtn = Shared_Func()
+shared_rtn = SharedFunc()
 
-class Ram_Var:
+class RamVar:
     def __init__(self, val: int) -> None:
         self.val: int = val
     def __str__(self) -> str:
         return f"[bp + {self.val}]"
 
-class reg_var:
+class RegVar:
     def __init__(self, val:int) -> None:
         self.val:int = val
     def __str__(self) -> str:
@@ -51,8 +55,8 @@ class reg_var:
             case _:
                 return f"R{self.val}"
 
-base_pointer = partial(reg_var, 3)
-stack_pointer = partial(reg_var, 4)
+base_pointer = partial(RegVar, 3)
+stack_pointer = partial(RegVar, 4)
 
 
 class Operand(Enum):
@@ -143,7 +147,6 @@ class Operand(Enum):
     LABEL = auto()
     INNER_START = auto()
     INNER_END = auto()
-    SET_VARIABLE_MAX = auto() # this used for the CALL operand where arguments are push and returns are pop
     RETURN_HELPER = auto()
     CALL_HELPER = auto()
 
@@ -165,17 +168,17 @@ class Operand(Enum):
             return self
 
         match (source, dest):
-            case reg_var(), reg_var():
+            case RegVar(), RegVar():
                 return self
-            case Ram_Var(), reg_var():
+            case RamVar(), RegVar():
                 return Operand(self.value + 1)
-            case reg_var(), int():
+            case RegVar(), int():
                 return Operand(self.value + 2)
-            case reg_var(), Ram_Var():
+            case RegVar(), RamVar():
                 return Operand(self.value + 3)
-            case Ram_Var(), int():
+            case RamVar(), int():
                 return Operand(self.value + 4)
-            case Ram_Var(), Ram_Var():
+            case RamVar(), RamVar():
                 return Operand(self.value + 5)
 
     def check_jump(self):
@@ -186,10 +189,10 @@ class Operand(Enum):
 
 
 class Command:
-    def __init__(self, op: Operand, source: int | str | Ram_Var | reg_var | list[int | str] | None = None, dest: int | str | Ram_Var | reg_var | None = None, location: int = None):
+    def __init__(self, op: Operand, source: int | str | RamVar | RegVar | list[int | str] | None = None, dest: int | str | RamVar | RegVar | None = None, location: int = None):
         self.op: Operand = op
-        self.source: int | str | Ram_Var | reg_var | list[int | str] | None = source
-        self.dest: int | str | Ram_Var | reg_var | list[int | str] |  None = dest
+        self.source: int | str | RamVar | RegVar | list[int | str] | None = source
+        self.dest: int | str | RamVar | RegVar | list[int | str] | None = dest
         self.location: int = location
         self.other: str = ""
 
@@ -225,16 +228,16 @@ class Command:
 
         temp = ""
         binary: str = f"{self.op.value:02x}"
-        if isinstance(self.source, reg_var) and isinstance(self.dest, reg_var):
+        if isinstance(self.source, RegVar) and isinstance(self.dest, RegVar):
             binary += f"{self.source.val:01x}{self.source.val:01x}"
         else:
-            if isinstance(self.source, Ram_Var):
+            if isinstance(self.source, RamVar):
                 temp = self.number_hex(self.source.val)
             elif isinstance(self.source, int):
                 temp = self.number_hex(self.source)
             if temp is not None:
                 binary += temp
-            if isinstance(self.dest, Ram_Var):
+            if isinstance(self.dest, RamVar):
                 temp = self.number_hex(self.dest.val)
             elif isinstance(self.dest, int):
                 temp = self.number_hex(self.dest)
@@ -242,9 +245,9 @@ class Command:
                 binary += temp
 
         if self.location is not None:
-            id = jm.get_index(self.location)
-            binary += self.number_hex(id >> 4)
-            binary += self.number_hex(id & 0x0F)
+            _id = jm.get_index(self.location)
+            binary += self.number_hex(_id >> 4)
+            binary += self.number_hex(_id & 0x0F)
 
         return binary
 
@@ -262,14 +265,6 @@ class Ram:
 
         # computed after ifetimes are computed
         self._lifetimes_stack: list[tuple[str, int]] = []
-
-        # how many times source is a string and operand is not MOV
-        self.temp_used: int = 0
-        # move temp is what temp register to use 0 = ax, 1 = bx
-        self.move_temp: int = 0
-
-        # this used for the CALL operand where arguments are push and returns are pop
-        self.variable_max: int = 0
 
         self.return_offset: int = shared_rtn.return_count[function_name] + 1
 
@@ -331,96 +326,99 @@ class Ram:
             expected_value = value + 1
         return expected_value
 
+    def get_stack_pointer(self) -> int:
+        # 1 represents the base pointer that exists at [bp + 0]
+        return max(self._ram.values(), default=0) + 1
+
     def allocate_helper(self, op: Operand, var):
         # assigning ram from strings, if it does not exist create it
         if var is not None and isinstance(var, str):
             var_location = self._get_var(var)
-            if var == "": # case where var is the temp variable
-                return reg_var(self.temp_used)
+            if var.startswith(temp_identifier): # case where var is the temp variable
+                return RegVar(int(var[1:]))
             elif var_location is None: # case where var does not exist
                 if op != Operand.MOV: # only MOV can create variables
                     raise ValueError("Initialise the variable before using it")
-                return Ram_Var(self._set_var(var))
+                return RamVar(self._set_var(var))
             else:
-                return Ram_Var(var_location) # case where var exists
-        elif isinstance(var, int) and var < 0: # case where var is int and is negative
-            # the -(i +1), is to append it to the front of all the vars, example -3 and the max index of variables is 4, it would be in index 7, so (3 + 4)
-            return Ram_Var(self.variable_max + (var * -1))
-        return None
+                return RamVar(var_location) # case where var exists
+        return var
 
     def allocate_command(self, cmd: Command, instruction: int, function_name:str) -> list[Command]:
-        final_cmd: list[Command] = []
-        if cmd.op == Operand.RETURN_HELPER:
-            shared_rtn.validate_return(function_name, len(cmd.source))
-            for index, arg in enumerate(cmd.source):
-                var_location = self._get_var(arg)
-                if var_location is None:
-                    raise ValueError("Initialise the variable before returning it")
-                final_cmd.append(Command(Operand.MOV, Ram_Var(index + 1), Ram_Var(var_location)))
+        final_command: list[Command] = []
 
-            final_cmd.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
-                              Command(Operand.MOV, base_pointer(), Ram_Var(0)),  # pop the base_pointer
-                              Command(Operand.RTRN)
-                              ])
-            return final_cmd
-
+        """
+        Calling and returning function
+        
+        base pointer for the current function starting at 0
+        ####################
+        reserved for returning for that function: example return a,b = 1-2
+        ####################
+        reserved the argument for that function: example current_func(a,b) = 3-4
+        ####################
+        reserved for functions locals and globals: example a = 8; b = 10; = 5-6
+        ####################
+        reserved on CALLING example a,b = CALL new_function(a,b)
+        base pointer for the called function: = 7
+        ####################
+        reserved for returns for call = 8-9
+        ####################
+        reserved for arguments for call = 10-11
+        ####################
+        reserved for future locals and globals on the call: 12-onwards
+        """
         self._remove_dead_vars(instruction)
 
-        if cmd.op == Operand.SET_VARIABLE_MAX:
-            if all(not val for val in self._ram.values()):
-                self.variable_max = 0
-            else:
-                self.variable_max = max(self._ram.values()) + 1
-            return []
+        # logic for the returning
+        if cmd.op == Operand.RETURN_HELPER:
+            # check if the return is consistent
+            shared_rtn.validate_return(function_name, len(cmd.source))
 
-        if cmd.op == Operand.CALL:
-            if all(not val for val in self._ram.values()):
-                temp = 1
-            else:
-                temp = max(self._ram.values())+1
-            return [Command(Operand.ADD, stack_pointer(), temp), cmd]
+            # enumerate through all the returned arguments
+            for index, arg in enumerate(cmd.source):
+                var_location = self.allocate_helper(cmd.op, arg)
+                # gets the location of the variable and put it in the right location
+                final_command.append(Command(Operand.MOV, RamVar(index + 1), RamVar(var_location)))
 
-        # logic in order to manage the temp variables, when the first temp is used the second one steps in
-        if (cmd.op not in [Operand.MOV, Operand.NOT] and isinstance(cmd.source, str)
-                and isinstance(cmd.dest, str) and cmd.source != ""):
-            self.move_temp += 1
-            if self.move_temp >= 2:
-                self.temp_used = 1
-        if (cmd.op != Operand.NOT and cmd.dest == "") or cmd.op == Operand.CMP:
-            self.move_temp = 0
-            self.temp_used = 0
+            # clean up before returning
+            final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
+                              Command(Operand.MOV, base_pointer(), RamVar(0)),  # pop the base_pointer
+                              Command(Operand.RTRN)
+                              ])
+            return final_command
 
-        # logic when the op is compare and both source and destination are temps
-        # set the source to ax, dest to bx
-        if cmd.op == Operand.CMP and cmd.source == "" and cmd.dest == "":
-            cmd.source = reg_var(0)
-            cmd.dest = reg_var(1)
-            return [cmd]
+        # logic for calling functions
+        if cmd.op == Operand.CALL_HELPER:
+            # source is returns and dest is arguments, .other is the name of the function
+            shared_rtn.validate_return(cmd.other, len(cmd.source))
+            shared_rtn.validate_arg(cmd.other, len(cmd.dest))
+
+            sp: int = self.get_stack_pointer()
+            arg_offset: int = len(cmd.source) + sp + 1
+
+            # compute the arguments
+            for index, arg in enumerate(cmd.dest):
+                new_arg = self.allocate_helper(Operand.MOV, arg)
+                final_command.append(Command(Operand.MOV, RamVar(arg_offset + index), new_arg))
+
+            # compute the returns if it does exist move it else let it be
+            for index, arg in enumerate(cmd.source):
+                var_location = self._get_var(arg)
+                return_offset = sp + index + 1
+                if var_location is None:
+                    self._ram[arg] = return_offset # let it exist without moving it
+                else: # move it because it existed
+                    final_command.append(Command(Operand.MOV, var_location, RamVar(return_offset)))
+
+            return final_command + [Command(Operand.ADD, stack_pointer(), sp), Command(Operand.CALL, None, None, jm.get_function(cmd.other))]
 
         # logic assigning ram locations for var names, handling cases of allocating new variables and the location of old variables
-        temp = self.allocate_helper(cmd.op, cmd.source)
-        if temp is not None:
-            cmd.source = temp
-        temp = self.allocate_helper(cmd.op, cmd.dest)
-        if temp is not None:
-            cmd.dest = temp
+        cmd.source = self.allocate_helper(cmd.op, cmd.source)
+        cmd.dest = self.allocate_helper(cmd.op, cmd.dest)
 
-        # logic for chain arithmetic forcing using temp, ax or bx
-        # example:
-        # a = 6 / b, oder of operations is enforced for / and %
-        # MOV, ax, 6
-        # DIV, ax, b
-        # MOV, a, ax
-        if  ((isinstance(cmd.source, Ram_Var) or isinstance(cmd.source, int)) and
-                (isinstance(cmd.dest, Ram_Var) or isinstance(cmd.dest, int)) and
-                cmd.op != Operand.MOV):
+        final_command.append(cmd)
 
-            final_cmd.append(Command(Operand.MOV, reg_var(self.temp_used), cmd.source))
-            cmd.source = reg_var(self.temp_used)
-
-        final_cmd.append(cmd)
-
-        return final_cmd
+        return final_command
 
 
 class JumpManager:

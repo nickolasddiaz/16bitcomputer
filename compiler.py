@@ -2,7 +2,7 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, jm, Ram, Ram_Var, reg_var, base_pointer, stack_pointer, shared_rtn
+from ram import Operand, Command, jm, Ram, RamVar, RegVar, base_pointer, stack_pointer, shared_rtn, temp_identifier
 from functools import partial
 import heapq
 
@@ -99,7 +99,7 @@ CommandInnerEnd = partial(Command, Operand.INNER_END, None, None, None)
 CommandReturn = partial(Command, Operand.RETURN_HELPER)
 
 
-class temp_helper:
+class Temp_Helper:
     def __init__(self):
         self._dead_temp: list[int] = [0]
         heapq.heapify(self._dead_temp)
@@ -111,11 +111,14 @@ class temp_helper:
         temp = heapq.heappop(self._dead_temp)
         if not self._dead_temp:
             heapq.heappush(self._dead_temp, temp + 1)
-        return f"#{temp}"
+        return f"{temp_identifier}{temp}"
 
-temp_help = temp_helper()
+temp_help = Temp_Helper()
 
 class CodeTransformer(Transformer):
+    def __init__(self):
+        # just a number to store a temp when calling a function
+        self.call_temp: int = 0
 
        # --- var/number functions --------------------------
     def NUMBER(self, n):
@@ -134,28 +137,33 @@ class CodeTransformer(Transformer):
         return value
 
     def NAME(self, name):
-        return f"{name.value}_"
+        return name.value
 
     def nop(self, items):
-        return ('NOP',),
+        return [Command(Operand.NOP)]
 
     def bit_not(self, items):
         return items[0],[Command(Operand.NOT, items[0])]
 
     # --- product functions --------------------------
-    def product_helper(self, input1: int|str|tuple[str,list[Command]], input2: int|str|tuple[str,list[Command]], op: Operand) -> int|str|tuple[int | str, list[Command]]:
-        final_commands = []
-        if isinstance(input1, tuple):
-            final_commands.extend(input1[1])
-            product1 = input1[0]
+    def input_helper(self, input: int|str|tuple[str,list[Command]], commands: list[Command]) -> tuple[str|int,list[Command]] :
+        if isinstance(input, tuple):
+            if input[1][-1].op == Operand.CALL_HELPER:
+                temp_name = f"{self.call_temp}-call temp"
+                input = (temp_name, input[1])
+                input[1][-1].source = [temp_name]
+                self.call_temp += 1
+                commands = input[1] + commands
+            else:
+                commands.extend(input[1])
+            return input[0], commands
         else:
-            product1 = input1
+            return input, commands
 
-        if isinstance(input2, tuple):
-            final_commands.extend(input2[1])
-            product2 = input2[0]
-        else:
-            product2 = input2
+
+    def product_helper(self, input1: int|str|tuple[str,list[Command]], input2: int|str|tuple[str,list[Command]], op: Operand) -> int|str|tuple[int | str, list[Command]]:
+        product2,final_commands = self.input_helper(input2, [])
+        product1,final_commands = self.input_helper(input1, final_commands)
 
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
@@ -180,8 +188,8 @@ class CodeTransformer(Transformer):
                 case _:
                     raise ValueError(f"Cannot move an integer {product1} into an integer {product2} for this operand {op}")
 
-        is_temp1 = isinstance(product1, str) and product1[0] == "#"
-        is_temp2 = isinstance(product2, str) and product2[0] == "#"
+        is_temp1 = isinstance(product1, str) and product1.startswith(temp_identifier)
+        is_temp2 = isinstance(product2, str) and product2.startswith(temp_identifier)
         return_var = ""
 
         match (is_temp1, is_temp2):
@@ -201,7 +209,6 @@ class CodeTransformer(Transformer):
                 final_commands.append(Command(Operand.MOV, temp_var, product1))
                 final_commands.append(Command(op, temp_var, product2))
                 return_var = temp_var
-
 
         return return_var, final_commands
 
@@ -231,61 +238,46 @@ class CodeTransformer(Transformer):
     
     # --- assignments functions --------------------------
 
+    def move_helper(self, input1: str|int|tuple[str,list[Command]], input2:str|int|tuple[str,list[Command]], op: Operand) -> list[Command]:
+        product2, final_commands = self.input_helper(input2, [])
+        product1, final_commands = self.input_helper(input1, final_commands)
+
+        return final_commands + [Command(op, product1, product2)]
     
-    def assign_var(self, items):
-        temp = self.product_helper(items[0], items[1], Operand.MOV)
-        for i in temp[1]:
-            print(i)
-        raise ValueError(temp)
-        return temp[1] + [Command(Operand.MOV, temp[0], temp[1])]
+    def assign_var(self, items) -> list[Command]:
+        return self.move_helper(items[0], items[1], Operand.MOV)
     
-    def add_assign_var(self, items):
-        self.product_helper(items[0], items[1], Operand.ADD)
-        return self.getblock()
+    def add_assign_var(self, items) -> list[Command]:
+        return self.move_helper(items[0], items[1], Operand.ADD)
     
-    def sub_assign_var(self, items):
-        self.product_helper(items[0], items[1], Operand.SUB)
-        return self.getblock()
+    def sub_assign_var(self, items) -> list[Command]:
+        return self.move_helper(items[0], items[1], Operand.SUB)
     
-    def mul_assign_var(self, items):
-        self.product_helper(items[0], items[1], Operand.MULT)
-        return self.getblock()
+    def mul_assign_var(self, items) -> list[Command]:
+        return self.move_helper(items[0], items[1], Operand.MULT)
     
-    def div_assign_var(self, items):
-        self.product_helper(items[0], items[1], Operand.DIV)
-        return self.getblock()
+    def div_assign_var(self, items) -> list[Command]:
+        return self.move_helper(items[0], items[1], Operand.DIV)
     
     # --- Comparison --------------------------
 
     def compare_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JEQ))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JEQ)], (None, None, Compare.COMP)
     
     def compare_not_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JNE))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.COMP)
     
     def compare_greater_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JGE))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JGE)], (None, None, Compare.COMP)
     
     def compare_less_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JLE))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JLE)], (None, None, Compare.COMP)
     
     def compare_greater(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JG))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JG)], (None, None, Compare.COMP)
     
     def compare_less(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        self.product_helper(items[0], items[1], Operand.CMP)
-        self.block.append(Command(Operand.JL))
-        return self.getblock(), (None, None, Compare.COMP)
+        return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JL)], (None, None, Compare.COMP)
 
     def and_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         block1 = items[0][0]
@@ -488,7 +480,7 @@ class CodeTransformer(Transformer):
 
         function_label = jm.get_function(function_name)
         final_block = [CommandLabel(function_label),
-                       Command(Operand.MOV, Ram_Var(0), base_pointer()),  # push the base_pointer
+                       Command(Operand.MOV, RamVar(0), base_pointer()),  # push the base_pointer
                        Command(Operand.MOV, base_pointer(), stack_pointer()),  # starting function's frame
                        ]
 
@@ -520,10 +512,11 @@ class CodeTransformer(Transformer):
     def args(self, items):
         return items
     
-    def function_call(self, items):
+    def function_call(self, items) -> tuple[str,list[Command]]:
+        # source is returns and dest is arguments, .other is the name of the function
         temp = Command(Operand.CALL_HELPER, [], items[1])
         temp.other = items[0] # the name of the function
-        return temp
+        return "", [temp]
 
     def empty_return_args(self, items):
         return []
@@ -535,28 +528,31 @@ class CodeTransformer(Transformer):
 
     def multi_assign_var(self, items) -> list[Command]:
         to_assign: list[str] = items[0]
-        from_assign: list[int|str|tuple|Command] = items[1:]
+        from_assign: list[int|str|tuple[str,list[Command]]] = items[1:]
         if len(to_assign) < len(from_assign):
             raise SyntaxError(f"Too few arguments: {to_assign}")
         size_function: int = len(to_assign) - len(from_assign) +1
 
         final_commands = []
         to_offset = 0
-        for index, assign in enumerate(from_assign):
-            match(assign):
+        for i, assign in enumerate(from_assign):
+            match assign:
                 case int()| str():
-                    final_commands.append(Command(Operand.MOV, to_assign[index + to_offset], assign))
+                    final_commands.append(Command(Operand.MOV, to_assign[i + to_offset], assign))
                 case tuple():
-                    final_commands.extend(assign[1])
-                    final_commands.append(Command(Operand.MOV, to_assign[index + to_offset], assign[0]))
-                case Command():
-                    assign.source = to_assign[index + to_offset: index + to_offset + size_function]
-                    if size_function != 1:
-                        to_offset = size_function -1
-                        size_function = 1
-                    final_commands.append(assign)
+                    if assign[0] == "":
+                        assign[1][-1].source = to_assign[i + to_offset: i + to_offset + size_function]
+                        if size_function != 1:
+                            to_offset = size_function - 1
+                            size_function = 1
+                        final_commands.extend(assign[1])
+                    else:
+                        final_commands.extend(assign[1])
+                        final_commands.append(Command(Operand.MOV, to_assign[i + to_offset], assign[0]))
+
 
         return final_commands
+
     def start(self, items):
         return self.list_in_list(items)
 
