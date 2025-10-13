@@ -200,7 +200,7 @@ This is a Complex Instruction Set Computer (CISC) with microcode 8-bit opcodes d
 ### NOT Operations
 | Opcode | Mnemonic       | Format | Description            |
 |--------|----------------|--------|------------------------|
-| `0x44` | `NOT reg`      | R      | input1 = negate input1 |
+| `0x44` | `NOT reg`      | R      | input1 = negate input2 |
 | `0x45` | `NOT_R [addr]` | R      |                        |
 
 ### Control Flow Instructions

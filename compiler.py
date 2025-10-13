@@ -2,15 +2,13 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, jm, Ram, RamVar, RegVar, base_pointer, stack_pointer, shared_rtn, temp_identifier
+from ram import Operand, Command, jm, Ram, RamVar, base_pointer, stack_pointer, shared_rtn, temp_identifier, CompilerHelp
 from functools import partial
-import heapq
-
 
 code_parser = Lark(r"""
     ?start: function_definition+
 
-    ?function_definition: ("def"i | "int"i) NAME "(" args ")" "{" inline_block+ "}" -> function_declaration
+    ?function_definition: ("def"i | "int"i) NAME "(" args ")" ("->" NUMBER)? "{" inline_block+ "}" -> function_declaration
     
     ?inline_block: statements
         | block ";"
@@ -24,7 +22,7 @@ code_parser = Lark(r"""
     
     ?else_statement: "else"i "{" inline_block+ "}" -> else_statement
     
-    ?args: (NAME|NUMBER) ("," (NAME|NUMBER))* -> args
+    ?args: (sum) ("," (sum))* -> args
         | -> empty_args
     
     ?block: assigns 
@@ -98,28 +96,7 @@ CommandInnerStart = partial(Command, Operand.INNER_START, None, None, None)
 CommandInnerEnd = partial(Command, Operand.INNER_END, None, None, None)
 CommandReturn = partial(Command, Operand.RETURN_HELPER)
 
-
-class Temp_Helper:
-    def __init__(self):
-        self._dead_temp: list[int] = [0]
-        heapq.heapify(self._dead_temp)
-
-    def del_var(self, var: int):
-        heapq.heappush(self._dead_temp, var)
-
-    def app_var(self) -> str:
-        temp = heapq.heappop(self._dead_temp)
-        if not self._dead_temp:
-            heapq.heappush(self._dead_temp, temp + 1)
-        return f"{temp_identifier}{temp}"
-
-temp_help = Temp_Helper()
-
 class CodeTransformer(Transformer):
-    def __init__(self):
-        # just a number to store a temp when calling a function
-        self.call_temp: int = 0
-
        # --- var/number functions --------------------------
     def NUMBER(self, n):
         return int(n)
@@ -143,27 +120,15 @@ class CodeTransformer(Transformer):
         return [Command(Operand.NOP)]
 
     def bit_not(self, items):
-        return items[0],[Command(Operand.NOT, items[0])]
+        product, final_commands = CompilerHelp.input_helper(items[0], [])
+        temp_name = CompilerHelp.get_temp_var()
+        return temp_name, final_commands + [Command(Operand.NOT, temp_name, product)]
 
     # --- product functions --------------------------
-    def input_helper(self, input: int|str|tuple[str,list[Command]], commands: list[Command]) -> tuple[str|int,list[Command]] :
-        if isinstance(input, tuple):
-            if input[1][-1].op == Operand.CALL_HELPER:
-                temp_name = f"{self.call_temp}-call temp"
-                input = (temp_name, input[1])
-                input[1][-1].source = [temp_name]
-                self.call_temp += 1
-                commands = input[1] + commands
-            else:
-                commands.extend(input[1])
-            return input[0], commands
-        else:
-            return input, commands
-
 
     def product_helper(self, input1: int|str|tuple[str,list[Command]], input2: int|str|tuple[str,list[Command]], op: Operand) -> int|str|tuple[int | str, list[Command]]:
-        product2,final_commands = self.input_helper(input2, [])
-        product1,final_commands = self.input_helper(input1, final_commands)
+        product2,final_commands = CompilerHelp.input_helper(input2, [])
+        product1,final_commands = CompilerHelp.input_helper(input1, final_commands)
 
         isint1 = isinstance(product1, int)
         isint2 = isinstance(product2, int)
@@ -194,18 +159,18 @@ class CodeTransformer(Transformer):
 
         match (is_temp1, is_temp2):
             case True, True:
-                temp_help.del_var(int(product2[1:]))
+                CompilerHelp.del_var(int(product2[1:]))
                 final_commands.append(Command(op, product1, product2))
                 return_var = product1
             case False, True:
-                temp_help.del_var(int(product2[1:]))
+                CompilerHelp.del_var(int(product2[1:]))
                 final_commands.append(Command(op, product2, product1))
                 return_var = product2
             case True, False:
                 final_commands.append(Command(op, product1, product2))
                 return_var = product1
             case False, False:
-                temp_var = temp_help.app_var()
+                temp_var = CompilerHelp.app_var()
                 final_commands.append(Command(Operand.MOV, temp_var, product1))
                 final_commands.append(Command(op, temp_var, product2))
                 return_var = temp_var
@@ -239,8 +204,9 @@ class CodeTransformer(Transformer):
     # --- assignments functions --------------------------
 
     def move_helper(self, input1: str|int|tuple[str,list[Command]], input2:str|int|tuple[str,list[Command]], op: Operand) -> list[Command]:
-        product2, final_commands = self.input_helper(input2, [])
-        product1, final_commands = self.input_helper(input1, final_commands)
+        product2, final_commands = CompilerHelp.input_helper(input2, [])
+        product1, final_commands = CompilerHelp.input_helper(input1, final_commands)
+        CompilerHelp.reset_temp()
 
         return final_commands + [Command(op, product1, product2)]
     
@@ -474,9 +440,19 @@ class CodeTransformer(Transformer):
     def function_declaration(self, items) -> list[Command]:
         function_name: str = items[0]
         function_arguments: list[str] = items[1]
+        if isinstance(items[2], int):
+            main_block: list[Command] = self.list_in_list(items[3:])
+            shared_rtn.validate_return(function_name, items[2])
+        else:
+            main_block: list[Command] = self.list_in_list(items[2:])
+            shared_rtn.validate_return(function_name, 0)
+
+        shared_rtn.validate_arg(function_name, len(function_arguments))
         var_all: Ram = Ram(function_name)
         var_all.set_arguments(function_arguments)
-        main_block: list[Command] = self.list_in_list(items[2:])
+
+        if function_name in ["VID", "VID_V", "VID_X", "VID_Y", "VIDEO", "HALT"]:
+            raise ValueError(f"{function_name} is a reserved function")
 
         function_label = jm.get_function(function_name)
         final_block = [CommandLabel(function_label),
@@ -484,7 +460,14 @@ class CodeTransformer(Transformer):
                        Command(Operand.MOV, base_pointer(), stack_pointer()),  # starting function's frame
                        ]
 
+        for i, arg in enumerate(main_block):
+            if isinstance(arg, tuple):
+                main_block[i] = arg[1][0]
+
         var_all.compute_lifetimes(main_block)
+
+        for arg in function_arguments:
+            var_all.set_lifetime(arg, 0)
 
         for i, item in enumerate(main_block, start=0):
             if item.op == Operand.INNER_START:

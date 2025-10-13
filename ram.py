@@ -1,3 +1,4 @@
+import heapq
 from collections import ChainMap
 from enum import Enum, auto
 from functools import partial
@@ -8,8 +9,8 @@ temp_identifier = "#"
 
 class SharedFunc:
     def __init__(self):
-        self.return_count: dict[str, int] = {"main": 0}
-        self.arg_count: dict[str, int] = {"main": 0}
+        self.return_count: dict[str, int] = {"main": 0, "VID": 0, "VID_V": 0, "VID_X": 0, "VID_Y": 0, "VIDEO": 0, "HALT": 0}
+        self.arg_count: dict[str, int] =    {"main": 0, "VID": 0, "VID_V": 1, "VID_X": 1, "VID_Y": 1, "VIDEO": 3, "HALT": 0}
 
     def validate_return(self, func_name: str, amount_returned):
         # function validates if all uses of the function returns the same amount
@@ -130,6 +131,8 @@ class Operand(Enum):
     AR_L = auto()
     NOT = auto()
     NOT_R = auto()
+    NOT_I = auto()
+    NOT_L = auto()
     JMP = auto()
     JEQ = auto()
     JNE = auto()
@@ -253,7 +256,7 @@ class Command:
 
     @staticmethod
     def number_hex(num: int) -> str:
-        if 0 <= num >= 0xFF:  # check if input is between 0-255
+        if 0 <= num >= 0xFF:  # check if input1 is between 0-255
             raise ValueError(f"Number {num} out of range, valid range is 0 - 255")
         return f"{num:02x}"
 
@@ -285,12 +288,16 @@ class Ram:
         self._ram[var_name] = min_num
         return min_num
 
-    def _set_lifetime(self, var_name: str|list[str|int], instruction: int) -> None:
+    def set_lifetime(self, var_name: str | list[str | int], instruction: int) -> None:
         if isinstance(var_name, list):
             for i in var_name:
-                self._set_lifetime(i,instruction)
+                self.set_lifetime(i, instruction)
+        if isinstance(var_name, tuple):
+            for i in var_name[1]:
+                self.set_lifetime(i.source, instruction)
+                self.set_lifetime(i.dest, instruction)
 
-        if var_name is None or var_name == "" or not isinstance(var_name, str):
+        if var_name is None or (isinstance(var_name, str) and var_name.startswith(temp_identifier)) or not isinstance(var_name, str):
             return
 
         self._lifetimes[var_name] =  instruction
@@ -309,8 +316,8 @@ class Ram:
     def compute_lifetimes(self, commands: list[Command]) -> None:
         # loop through each command and sets the number of the last used variable
         for index, cmd in enumerate(commands):
-            self._set_lifetime(cmd.source, index)
-            self._set_lifetime(cmd.dest, index)
+            self.set_lifetime(cmd.source, index)
+            self.set_lifetime(cmd.dest, index)
 
         # sort the stack where the closest vars are not used list[(var_name, num_when_they_die)]
         self._lifetimes_stack = list(self._lifetimes.items())
@@ -330,19 +337,26 @@ class Ram:
         # 1 represents the base pointer that exists at [bp + 0]
         return max(self._ram.values(), default=0) + 1
 
-    def allocate_helper(self, op: Operand, var):
+    def allocate_helper(self, var, op: Operand|None = None):
         # assigning ram from strings, if it does not exist create it
         if var is not None and isinstance(var, str):
             var_location = self._get_var(var)
             if var.startswith(temp_identifier): # case where var is the temp variable
                 return RegVar(int(var[1:]))
             elif var_location is None: # case where var does not exist
-                if op != Operand.MOV: # only MOV can create variables
-                    raise ValueError("Initialise the variable before using it")
+                if op != Operand.MOV and not (isinstance(var, str) and var.startswith("-")): # only MOV can create variables
+                    raise ValueError(f"Initialise the variable {var} before using it")
                 return RamVar(self._set_var(var))
             else:
                 return RamVar(var_location) # case where var exists
         return var
+
+    def complex_commands_helper(self, cmd: str|int, instruction: int, function_name:str) -> tuple[str | int, list[Command]]:
+        variable, var_lists = CompilerHelp.input_helper(cmd, [])
+        for cmd in var_lists:
+            self.allocate_command(cmd, instruction, function_name)
+        temp_var = self.allocate_helper(variable, Operand.MOV)
+        return temp_var, var_lists
 
     def allocate_command(self, cmd: Command, instruction: int, function_name:str) -> list[Command]:
         final_command: list[Command] = []
@@ -376,9 +390,11 @@ class Ram:
 
             # enumerate through all the returned arguments
             for index, arg in enumerate(cmd.source):
-                var_location = self.allocate_helper(cmd.op, arg)
+                variable, var_lists = self.complex_commands_helper(arg, instruction, function_name)
+
+                var_location = self.allocate_helper(variable)
                 # gets the location of the variable and put it in the right location
-                final_command.append(Command(Operand.MOV, RamVar(index + 1), RamVar(var_location)))
+                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(index + 1), var_location)])
 
             # clean up before returning
             final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
@@ -396,10 +412,23 @@ class Ram:
             sp: int = self.get_stack_pointer()
             arg_offset: int = len(cmd.source) + sp + 1
 
+            if cmd.other in ["VID_V", "VID_X", "VID_Y", "VID_VXY"]:
+                variable, var_lists = self.complex_commands_helper(cmd.dest[0], instruction, function_name)
+                return var_lists + [Command(Operand[cmd.other], variable)]
+            elif cmd.other == "VIDEO":
+                variable, var_lists = self.complex_commands_helper(cmd.dest[0], instruction, function_name)
+                variable1, var_lists1 = self.complex_commands_helper(cmd.dest[1], instruction, function_name)
+                variable2, var_lists2 = self.complex_commands_helper(cmd.dest[2], instruction, function_name)
+                return (var_lists + [Command(Operand.VID_V, variable)]
+                        + var_lists1 + [Command(Operand.VID_X, variable1)]
+                        + var_lists2 + [Command(Operand.VID_Y, variable2)]
+                        + [Command(Operand.VID)])
+
+
             # compute the arguments
             for index, arg in enumerate(cmd.dest):
-                new_arg = self.allocate_helper(Operand.MOV, arg)
-                final_command.append(Command(Operand.MOV, RamVar(arg_offset + index), new_arg))
+                variable, var_lists = self.complex_commands_helper(arg, instruction, function_name)
+                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(arg_offset + index), variable)])
 
             # compute the returns if it does exist move it else let it be
             for index, arg in enumerate(cmd.source):
@@ -408,13 +437,13 @@ class Ram:
                 if var_location is None:
                     self._ram[arg] = return_offset # let it exist without moving it
                 else: # move it because it existed
-                    final_command.append(Command(Operand.MOV, var_location, RamVar(return_offset)))
+                    final_command.append(Command(Operand.MOV, RamVar(var_location), RamVar(return_offset)))
 
             return final_command + [Command(Operand.ADD, stack_pointer(), sp), Command(Operand.CALL, None, None, jm.get_function(cmd.other))]
 
         # logic assigning ram locations for var names, handling cases of allocating new variables and the location of old variables
-        cmd.source = self.allocate_helper(cmd.op, cmd.source)
-        cmd.dest = self.allocate_helper(cmd.op, cmd.dest)
+        cmd.source = self.allocate_helper(cmd.source, cmd.op)
+        cmd.dest = self.allocate_helper(cmd.dest, cmd.op)
 
         final_command.append(cmd)
 
@@ -476,5 +505,46 @@ class JumpManager:
             raise ValueError(f"Jump label has already been set: {self.names[id_]}")
 
 jm = JumpManager()
+
+
+class CompileHelper:
+    def __init__(self):
+        self._dead_temp: list[int] = [0]
+        heapq.heapify(self._dead_temp)
+        # just a number to store a temp when calling a function
+        self.call_temp: int = 0
+
+    def del_var(self, var: int):
+        heapq.heappush(self._dead_temp, var)
+
+    def app_var(self) -> str:
+        temp = heapq.heappop(self._dead_temp)
+        if not self._dead_temp:
+            heapq.heappush(self._dead_temp, temp + 1)
+        return f"{temp_identifier}{temp}"
+
+    def get_temp_var(self) -> str:
+        self.call_temp += 1
+        return f"-{self.call_temp}-call temp"
+
+    def reset_temp(self):
+        self.call_temp = 0
+
+    def input_helper(self, input1: int | str | tuple[str,list[Command]], commands: list[Command]) -> tuple[str | int,list[Command]] :
+        if isinstance(input1, Command):
+            raise ValueError("Command cannot be used as input")
+        if isinstance(input1, tuple):
+            if input1[1][-1].op == Operand.CALL_HELPER:
+                temp_name = self.get_temp_var()
+                input1 = (temp_name, input1[1])
+                input1[1][-1].source = [temp_name]
+                commands = input1[1] + commands
+            else:
+                commands.extend(input1[1])
+            return input1[0], commands
+        else:
+            return input1, commands
+
+CompilerHelp = CompileHelper()
 
 
