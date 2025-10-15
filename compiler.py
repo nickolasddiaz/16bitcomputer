@@ -2,86 +2,14 @@ from typing import Any
 
 from lark import Lark, Transformer
 from enum import auto, IntEnum
-from ram import Operand, Command, jm, Ram, RamVar, base_pointer, stack_pointer, shared_rtn, temp_identifier, CompilerHelp
+from ram import Operand, Command, jm, Ram, RamVar, base_pointer, stack_pointer, shared_rtn, register_id, CompilerHelp
 from functools import partial
 
-code_parser = Lark(r"""
-    ?start: function_definition+
+with open('grammar.txt', 'r') as file:
+    grammar = file.read()
 
-    ?function_definition: ("def"i | "int"i) NAME "(" args ")" ("->" NUMBER)? "{" inline_block+ "}" -> function_declaration
-    
-    ?inline_block: statements
-        | block ";"
-    
-    ?statements: "for"i "(" assigns ";" compares ";" assigns ")" "{" inline_block+ "}" -> for_loop
-        | "while"i "(" compares ")" "{" inline_block+ "}" -> while_loop
-        | "if"i "(" compares ")" "{" inline_block+ "}" elif_statement* else_statement? -> if_statement
-        | "do"i "{" inline_block+ "}" "while"i "(" compares ")" ";" -> do_while_loop
-    
-    ?elif_statement: "elif"i "(" compares ")" "{" inline_block+ "}" -> elif_statement
-    
-    ?else_statement: "else"i "{" inline_block+ "}" -> else_statement
-    
-    ?args: (sum) ("," (sum))* -> args
-        | -> empty_args
-    
-    ?block: assigns 
-        | "return"i return_args -> _return
-    
-    ?return_args: sum ("," sum)* -> return_args
-        | -> empty_return_args
-    
-    ?assigns: NAME "=" sum -> assign_var
-        | NAME "+=" sum -> add_assign_var
-        | NAME "-=" sum -> sub_assign_var
-        | NAME "*=" sum -> mul_assign_var
-        | NAME "/=" sum -> div_assign_var
-        | NAME "++" -> increment
-        | NAME "--" -> decrement
-        | list_assign "=" sum (","sum)* -> multi_assign_var
-        | function_call
-    
-    ?list_assign: NAME (","NAME)+
-    
-    ?compares: sum "==" sum -> compare_equal
-        | sum "!=" sum -> compare_not_equal
-        | sum ">=" sum -> compare_greater_equal
-        | sum "<=" sum -> compare_less_equal
-        | sum ">" sum -> compare_greater
-        | sum "<" sum -> compare_less
-        | compares ("&&"|"and"i) compares -> and_compare
-        | compares ("||"|"or"i) compares -> or_compare
-        | "(" compares ")"
-    
-    ?sum: product
-        | sum "+" product -> add
-        | sum "-" product -> sub
-    
-    ?product: atom
-        | product "*" atom -> mult
-        | product "/" atom -> div
-        | product "%" atom -> quot
-        | product "&" atom -> bit_and
-        | product "|" atom -> bit_or
-        | product "^" atom -> bit_xor
-    
-    ?atom: NUMBER -> number
-        | HEX -> hex_number
-        | NAME -> var
-        | function_call
-        | "~" atom -> bit_not
-        | "(" sum ")"
-    
-    ?function_call: NAME "(" args ")" -> function_call
-    
-    %import common.CNAME -> NAME
-    %import common.NUMBER
-    %import common.WS_INLINE
-    %import common.NEWLINE
-    %import python.HEX_NUMBER -> HEX
-    %ignore WS_INLINE
-    %ignore NEWLINE
-""", start='start', parser='lalr')
+#loads the grammar into the parser
+code_parser = Lark(grammar, start='start', parser='lalr')
 
 
 class Compare(IntEnum):
@@ -116,17 +44,41 @@ class CodeTransformer(Transformer):
     def NAME(self, name):
         return name.value
 
-    def nop(self, items):
-        return [Command(Operand.NOP)]
-
     def bit_not(self, items):
+        """
+        Takes previous variable performs NOT and returns the new temp variable
+        :return: tuple[new variable, the previous Commands along as its own]
+        """
+        if isinstance(items[0], int):
+            return ~items[0] # returns the negate integer
+        # easily separates the input into the variable and commands
         product, final_commands = CompilerHelp.input_helper(items[0], [])
-        temp_name = CompilerHelp.get_temp_var()
+        temp_name = CompilerHelp.get_temp_ram() # gets new temp variable
         return temp_name, final_commands + [Command(Operand.NOT, temp_name, product)]
+
+    def negative(self, items):
+        """
+        Takes previous variable performs NEG and returns the new temp variable
+        :return: tuple[new variable, the previous Commands along as its own]
+        """
+        if isinstance(items[0], int):
+            return ~items[0] + 1 # returns the 2's compliment on integer
+        # easily separates the input into the variable and commands
+        product, final_commands = CompilerHelp.input_helper(items[0], [])
+        temp_name = CompilerHelp.get_temp_ram() # gets new temp variable
+        return temp_name, final_commands + [Command(Operand.NEG, temp_name, product)]
 
     # --- product functions --------------------------
 
     def product_helper(self, input1: int|str|tuple[str,list[Command]], input2: int|str|tuple[str,list[Command]], op: Operand) -> int|str|tuple[int | str, list[Command]]:
+        """
+        Takes two inputs performs the necessary product like +-*/%.
+        Processes cases like the inputs being integers, registers or memory.
+        Combines the input's list of commands into a single command.
+        returns a tuple of variable, and list of commands
+        """
+
+        # separating the variables from the list of commands
         product2,final_commands = CompilerHelp.input_helper(input2, [])
         product1,final_commands = CompilerHelp.input_helper(input1, final_commands)
 
@@ -153,27 +105,33 @@ class CodeTransformer(Transformer):
                 case _:
                     raise ValueError(f"Cannot move an integer {product1} into an integer {product2} for this operand {op}")
 
-        is_temp1 = isinstance(product1, str) and product1.startswith(temp_identifier)
-        is_temp2 = isinstance(product2, str) and product2.startswith(temp_identifier)
+        # getting if the variable is a register
+        is_reg1 = isinstance(product1, str) and product1.startswith(register_id)
+        is_reg2 = isinstance(product2, str) and product2.startswith(register_id)
         return_var = ""
 
-        match (is_temp1, is_temp2):
-            case True, True:
-                CompilerHelp.del_var(int(product2[1:]))
+        match (is_reg1, is_reg2):
+            case True, True: # both are registers
+                # free the unused register coming from the destination
+                CompilerHelp.free_reg(int(product2[1:]))
                 final_commands.append(Command(op, product1, product2))
                 return_var = product1
-            case False, True:
-                CompilerHelp.del_var(int(product2[1:]))
+            case False, True: # right is register
+                # free the unused register coming from the destination
+                CompilerHelp.free_reg(int(product2[1:]))
                 final_commands.append(Command(op, product2, product1))
                 return_var = product2
-            case True, False:
+            case True, False: # left is register
                 final_commands.append(Command(op, product1, product2))
                 return_var = product1
-            case False, False:
-                temp_var = CompilerHelp.app_var()
-                final_commands.append(Command(Operand.MOV, temp_var, product1))
-                final_commands.append(Command(op, temp_var, product2))
-                return_var = temp_var
+            case False, False: # none is a register
+                # first get a temp register
+                # move the first product into the register
+                # then perform the operation on the second product
+                temp_reg = CompilerHelp.get_reg()
+                final_commands.append(Command(Operand.MOV, temp_reg, product1))
+                final_commands.append(Command(op, temp_reg, product2))
+                return_var = temp_reg
 
         return return_var, final_commands
 
@@ -196,17 +154,28 @@ class CodeTransformer(Transformer):
 
     
     def increment(self, items) -> list[Command]:
+        """ processes examples like var++"""
         return [Command(Operand.ADD, items[0], 1)]
     
     def decrement(self, items) -> list[Command]:
+        """ processes examples like var--"""
         return [Command(Operand.SUB, items[0], 1)]
+
+    def block(self, items):
+        CompilerHelp.reset()
+        return items
     
     # --- assignments functions --------------------------
 
     def move_helper(self, input1: str|int|tuple[str,list[Command]], input2:str|int|tuple[str,list[Command]], op: Operand) -> list[Command]:
+        """
+        Helps performs an operand on two inputs.
+        Returns the list of commands plus the operand
+        """
+        # separates the variable with the commands
         product2, final_commands = CompilerHelp.input_helper(input2, [])
         product1, final_commands = CompilerHelp.input_helper(input1, final_commands)
-        CompilerHelp.reset_temp()
+        CompilerHelp.free_all_reg()
 
         return final_commands + [Command(op, product1, product2)]
     
@@ -244,6 +213,9 @@ class CodeTransformer(Transformer):
     
     def compare_less(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         return self.move_helper(items[0], items[1], Operand.CMP) + [Command(Operand.JL)], (None, None, Compare.COMP)
+
+    def zero_compare(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.move_helper(items[0], 0, Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.COMP)
 
     def and_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         block1 = items[0][0]
@@ -426,7 +398,7 @@ class CodeTransformer(Transformer):
             jm.remove_duplicate(final_jump_label, final_commands[-1].location)
 
         return final_commands
-    
+
     def list_in_list(self,list_of_lists): # the body of the elif/else statements are in nested lists
         result = []
         for item in list_of_lists:
@@ -440,11 +412,15 @@ class CodeTransformer(Transformer):
     def function_declaration(self, items) -> list[Command]:
         function_name: str = items[0]
         function_arguments: list[str] = items[1]
-        if isinstance(items[2], int):
-            main_block: list[Command] = self.list_in_list(items[3:])
-            shared_rtn.validate_return(function_name, items[2])
-        else:
-            main_block: list[Command] = self.list_in_list(items[2:])
+        main_block: list[Command] = self.list_in_list(items[2:])
+
+        found_none:bool = True
+        for block in main_block:
+            if isinstance(block, Command) and block.op == Operand.RETURN_HELPER:
+                shared_rtn.validate_return(function_name, len(block.source))
+                found_none = False
+
+        if found_none:
             shared_rtn.validate_return(function_name, 0)
 
         shared_rtn.validate_arg(function_name, len(function_arguments))
@@ -467,7 +443,7 @@ class CodeTransformer(Transformer):
         var_all.compute_lifetimes(main_block)
 
         for arg in function_arguments:
-            var_all.set_lifetime(arg, 0)
+            var_all.set_lifetime(arg, -1)
 
         for i, item in enumerate(main_block, start=0):
             if item.op == Operand.INNER_START:
@@ -480,8 +456,6 @@ class CodeTransformer(Transformer):
         if function_name == "main":
             final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
 
-        for command in final_block:
-            command.compute_op()
 
         return final_block
     # --- function call --------------------------
@@ -539,29 +513,35 @@ class CodeTransformer(Transformer):
     def start(self, items):
         return self.list_in_list(items)
 
-
+# reads the program
 with open('program.txt', 'r') as file:
     program = file.read()
 
-
+# gets the parse-tree and writes it to program.tre
 parse_tree = code_parser.parse(program)
-print("Parse Token Tree:\n")
-print(parse_tree)
-print("\nPretty Print Parse Token Tree:\n")
-print(parse_tree.pretty())
+with open('program.tre', 'w') as f:
+    f.write(parse_tree.pretty())
 
 transformed = CodeTransformer().transform(parse_tree)
 
-print("\nAssembly Code:\n")
-
+# gets the assembly string and writes it to program.asm
 index = 0
+asm_str:str = ""
 for cmd in transformed:
     if cmd.op == Operand.LABEL:
         jm.set_pos(cmd.location, index)
     else:
-        index = index + 1
-    print(cmd)
+        index += cmd.num_instruct()
+    asm_str += str(cmd) + "\n"
 
-print("\nMachine Code:\n")
+with open('program.asm', 'w') as f:
+    f.write(asm_str)
+
+# gets the binary string and writes it to program.hex
+binary_str = ""
 for cmd in transformed:
-    print(cmd.get_binary(), end="")
+    cmd.compute_op()
+    binary_str += cmd.get_binary()
+
+with open('program.hex', 'w') as f:
+    f.write(binary_str)

@@ -5,7 +5,7 @@ from functools import partial
 
 
 
-temp_identifier = "#"
+register_id = "#"
 
 class SharedFunc:
     def __init__(self):
@@ -45,28 +45,30 @@ class RegVar:
         self.val:int = val
     def __str__(self) -> str:
         match self.val:
-            case 0:
-                return "ax"
-            case 1:
-                return "dx"
-            case 3:
+            case 14:
                 return "bp"
-            case 4:
+            case 15:
                 return "sp"
             case _:
                 return f"R{self.val}"
 
-base_pointer = partial(RegVar, 3)
-stack_pointer = partial(RegVar, 4)
+base_pointer = partial(RegVar, 14)
+stack_pointer = partial(RegVar, 15)
 
 
 class Operand(Enum):
     NOP = auto()
     HALT = auto()
-    VID = auto() # color the video
-    VID_V = auto() # set XTerm256 color model (8-bit)
-    VID_X = auto() # set the x-axis 16 pixels wide
-    VID_Y = auto() # set the y-axis 16 pixels tall
+    VID = auto() # set the color the video
+    VIDV = auto() # set XTerm256 color model (8-bit)
+    VIDV_R = auto()
+    VIDV_RR = auto()
+    VIDX = auto() # set the x-axis 16 pixels wide
+    VIDX_R = auto()
+    VIDX_RR = auto()
+    VIDY = auto() # set the y-axis 16 pixels tall
+    VIDY_R = auto()
+    VIDY_RR = auto()
     MOV = auto() # move register, register
     MOV_R = auto()  # move ram, register
     MOV_I = auto() # move register, immediate
@@ -77,62 +79,98 @@ class Operand(Enum):
     CMP_R = auto()
     CMP_I = auto()
     CMP_L = auto()
+    CMP_RI = auto()
+    CMP_RR = auto()
     ADD = auto()
     ADD_R = auto()
     ADD_I = auto()
     ADD_L = auto()
+    ADD_RI = auto()
+    ADD_RR = auto()
     SUB = auto()
     SUB_R = auto()
     SUB_I = auto()
     SUB_L = auto()
+    SUB_RI = auto()
+    SUB_RR = auto()
     MULT = auto()
     MUL_R = auto()
     MULT_I = auto()
     MULT_L = auto()
+    MULT_RI = auto()
+    MULT_RR = auto()
     DIV = auto()
     DIV_R = auto()
     DIV_I = auto()
     DIV_L = auto()
+    DIV_RI = auto()
+    DIV_RR = auto()
     QUOT = auto()
     QUOT_R = auto()
     QUOT_I = auto()
     QUOT_L = auto()
+    QUOT_RI = auto()
+    QUOT_RR = auto()
     AND = auto()
     AND_R = auto()
     AND_I = auto()
     AND_L = auto()
+    AND_RI = auto()
+    AND_RR = auto()
     OR = auto()
     OR_R = auto()
     OR_I = auto()
     OR_L = auto()
+    OR_RI = auto()
+    OR_RR = auto()
     XOR = auto()
     XOR_R = auto()
     XOR_I = auto()
     XOR_L = auto()
+    XOR_RI = auto()
+    XOR_RR = auto()
     SHL = auto()
     SHL_R = auto()
     SHL_I = auto()
     SHL_L = auto()
+    SHL_RI = auto()
+    SHL_RR = auto()
     SHR = auto()
     SHR_R = auto()
     SHR_I = auto()
     SHR_L = auto()
+    SHR_RI = auto()
+    SHR_RR = auto()
     RR = auto()
     RR_R = auto()
     RR_I = auto()
     RR_L = auto()
+    RR_RI = auto()
+    RR_RR = auto()
     RL = auto()
     RL_R = auto()
     RL_I = auto()
     RL_L = auto()
+    RL_RI = auto()
+    RL_RR = auto()
     AR = auto()
     AR_R = auto()
     AR_I = auto()
     AR_L = auto()
+    AR_RI = auto()
+    AR_RR = auto()
+    NEG = auto()
+    NEG_R = auto()
+    NEG_I = auto()
+    NEG_L = auto()
+    NEG_RI = auto()
+    NEG_RR = auto()
     NOT = auto()
     NOT_R = auto()
     NOT_I = auto()
     NOT_L = auto()
+    NOT_RI = auto()
+    NOT_RR = auto()
     JMP = auto()
     JEQ = auto()
     JNE = auto()
@@ -167,6 +205,15 @@ class Operand(Enum):
         # MOV_I = auto()  # move register, immediate
         # MOV_L = auto()  # move register, ram
         # MOV_RI = auto()  # move ram, immediate
+        if Operand.VIDV.value <= self.value <= Operand.VIDY_RR.value:
+            match source:
+                case int():
+                    return self
+                case RegVar():
+                    return Operand(self.value + 1)
+                case RamVar():
+                    return Operand(self.value + 2)
+
         if not Operand.MOV.value <= self.value <= Operand.NOT_R.value:
             return self
 
@@ -225,40 +272,83 @@ class Command:
     def compute_op(self) -> None:
         self.op = self.op.correct_op(self.source, self.dest)
 
+    def num_instruct(self) -> int:
+        if self.op == Operand.LABEL:
+            return 0
+        inst = 1
+        if isinstance(self.source, RamVar) | isinstance(self.source, int):
+            inst += 1
+        if isinstance(self.dest, RamVar) | isinstance(self.dest, int):
+            inst += 1
+
+        return inst
+
     def get_binary(self) -> str:
-        if self.op in [Operand.LABEL, Operand.RETURN_HELPER]:
+        if self.op == Operand.LABEL:
             return ""
 
-        temp = ""
-        binary: str = f"{self.op.value:02x}"
-        if isinstance(self.source, RegVar) and isinstance(self.dest, RegVar):
-            binary += f"{self.source.val:01x}{self.source.val:01x}"
-        else:
-            if isinstance(self.source, RamVar):
-                temp = self.number_hex(self.source.val)
-            elif isinstance(self.source, int):
-                temp = self.number_hex(self.source)
-            if temp is not None:
-                binary += temp
-            if isinstance(self.dest, RamVar):
-                temp = self.number_hex(self.dest.val)
-            elif isinstance(self.dest, int):
-                temp = self.number_hex(self.dest)
-            if temp is not None:
-                binary += temp
+        part1:str = ""
+        part2:str = ""
+        part3:str = ""
 
-        if self.location is not None:
-            _id = jm.get_index(self.location)
-            binary += self.number_hex(_id >> 4)
-            binary += self.number_hex(_id & 0x0F)
+        binary_str:int = self.op.value << 8
+        if isinstance(self.source, RegVar):
+            binary_str += self.source.val << 4
+        if isinstance(self.dest, RegVar):
+            binary_str += self.source.val
 
-        return binary
+        part1 = self.number_string(binary_str)
+
+        part2_used: bool = False
+
+        binary_str2:int = 0
+        if isinstance(self.source, RamVar):
+            part2_used = True
+            binary_str2 = self.source.val
+        elif isinstance(self.source, int):
+            part2_used = True
+            binary_str2 = self.format_signed_16bit_hex(self.source)
+
+        part2 = self.number_string(binary_str2)
+        part3_used: bool = False
+
+        binary_str3:int = 0
+        if isinstance(self.dest, RamVar):
+            part3_used = True
+            binary_str3 = self.dest.val
+        elif isinstance(self.dest, int):
+            part3_used = True
+            binary_str3 = self.format_signed_16bit_hex(self.dest)
+        if isinstance(self.location, int):
+            part3_used = True
+            binary_str3 = jm.get_index(self.location)
+
+        part3 = self.number_string(binary_str3)
+
+        full_str = part1
+        if part2_used:
+            full_str += part2
+        if part3_used:
+            full_str += part3
+
+        return full_str
+
 
     @staticmethod
-    def number_hex(num: int) -> str:
-        if 0 <= num >= 0xFF:  # check if input1 is between 0-255
-            raise ValueError(f"Number {num} out of range, valid range is 0 - 255")
-        return f"{num:02x}"
+    def format_signed_16bit_hex(num) -> int:
+        # Ensure the number fits within a 16-bit signed range
+        if not (-32768 <= num <= 32767):
+            raise ValueError("Number out of signed 16-bit range (-32768 to 32767)")
+
+        if num < 0:
+            # Convert negative number to its 16-bit two's complement equivalent
+            num = 2 ** 16 + num
+        return num
+
+    @staticmethod
+    def number_string(number) -> str:
+        s = f"{number:X}"
+        return s.zfill(4)
 
 
 class Ram:
@@ -297,7 +387,7 @@ class Ram:
                 self.set_lifetime(i.source, instruction)
                 self.set_lifetime(i.dest, instruction)
 
-        if var_name is None or (isinstance(var_name, str) and var_name.startswith(temp_identifier)) or not isinstance(var_name, str):
+        if var_name is None or (isinstance(var_name, str) and var_name.startswith(register_id)) or not isinstance(var_name, str):
             return
 
         self._lifetimes[var_name] =  instruction
@@ -341,7 +431,7 @@ class Ram:
         # assigning ram from strings, if it does not exist create it
         if var is not None and isinstance(var, str):
             var_location = self._get_var(var)
-            if var.startswith(temp_identifier): # case where var is the temp variable
+            if var.startswith(register_id): # case where var is the temp variable
                 return RegVar(int(var[1:]))
             elif var_location is None: # case where var does not exist
                 if op != Operand.MOV and not (isinstance(var, str) and var.startswith("-")): # only MOV can create variables
@@ -419,9 +509,9 @@ class Ram:
                 variable, var_lists = self.complex_commands_helper(cmd.dest[0], instruction, function_name)
                 variable1, var_lists1 = self.complex_commands_helper(cmd.dest[1], instruction, function_name)
                 variable2, var_lists2 = self.complex_commands_helper(cmd.dest[2], instruction, function_name)
-                return (var_lists + [Command(Operand.VID_V, variable)]
-                        + var_lists1 + [Command(Operand.VID_X, variable1)]
-                        + var_lists2 + [Command(Operand.VID_Y, variable2)]
+                return (var_lists + [Command(Operand.VIDV, variable)]
+                        + var_lists1 + [Command(Operand.VIDX, variable1)]
+                        + var_lists2 + [Command(Operand.VIDY, variable2)]
                         + [Command(Operand.VID)])
 
 
@@ -514,28 +604,33 @@ class CompileHelper:
         # just a number to store a temp when calling a function
         self.call_temp: int = 0
 
-    def del_var(self, var: int):
+    def free_reg(self, var: int):
         heapq.heappush(self._dead_temp, var)
 
-    def app_var(self) -> str:
+    def get_reg(self) -> str:
         temp = heapq.heappop(self._dead_temp)
         if not self._dead_temp:
             heapq.heappush(self._dead_temp, temp + 1)
-        return f"{temp_identifier}{temp}"
+        return f"{register_id}{temp}"
 
-    def get_temp_var(self) -> str:
+    def get_temp_ram(self) -> str:
         self.call_temp += 1
         return f"-{self.call_temp}-call temp"
 
-    def reset_temp(self):
+    def free_all_reg(self):
         self.call_temp = 0
+
+    def reset(self):
+        self._dead_temp: list[int] = [0]
+        heapq.heapify(self._dead_temp)
+        self.call_temp: int = 0
 
     def input_helper(self, input1: int | str | tuple[str,list[Command]], commands: list[Command]) -> tuple[str | int,list[Command]] :
         if isinstance(input1, Command):
-            raise ValueError("Command cannot be used as input")
+            raise ValueError("Command object cannot be used as input")
         if isinstance(input1, tuple):
             if input1[1][-1].op == Operand.CALL_HELPER:
-                temp_name = self.get_temp_var()
+                temp_name = self.get_temp_ram()
                 input1 = (temp_name, input1[1])
                 input1[1][-1].source = [temp_name]
                 commands = input1[1] + commands
