@@ -191,28 +191,28 @@ class CodeTransformer(Transformer):
         AND for things like a == b && a == b
         OR for things like a == b && a == b
         """
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JEQ)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JEQ)], (None, None, Compare.SIMPLE)
     
     def compare_not_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JNE)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.SIMPLE)
     
     def compare_greater_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JGE)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JGE)], (None, None, Compare.SIMPLE)
     
     def compare_less_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JLE)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JLE)], (None, None, Compare.SIMPLE)
     
     def compare_greater(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JG)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JG)], (None, None, Compare.SIMPLE)
     
     def compare_less(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JL)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JL)], (None, None, Compare.SIMPLE)
 
     def zero_compare(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         """
         Computes the compare for a single operand. For example if (a + 5)
         """
-        return self.process_assignment_operation(items[0], 0, Operand.CMP) + [Command(Operand.JNE)], (None, None, self.Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], 0, Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.SIMPLE)
 
     def and_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         """
@@ -233,10 +233,10 @@ class CodeTransformer(Transformer):
         final_fail = jump_manager.remove_duplicate(fail_label2, fail_label1)
 
         # if operand is Compare negate it and set its jump_label to fail
-        if type1 == self.Compare.SIMPLE:
+        if type1 == Compare.SIMPLE:
             block1[-1].jump_label = final_fail
             block1[-1].negate_jump()
-        if type2 == self.Compare.SIMPLE:
+        if type2 == Compare.SIMPLE:
             block2[-1].jump_label = final_fail
             block2[-1].negate_jump()
 
@@ -244,10 +244,10 @@ class CodeTransformer(Transformer):
         if true_label1 is not None:
             block1.append(CommandLabel(true_label1))
 
-        if type1 != self.Compare.SIMPLE and type2 != self.Compare.SIMPLE:
+        if type1 != Compare.SIMPLE and type2 != Compare.SIMPLE:
             final_true = true_label2
 
-        return block1 + block2, (final_fail, final_true, self.Compare.LOGICAL_AND)
+        return block1 + block2, (final_fail, final_true, Compare.LOGICAL_AND)
 
     def or_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         """
@@ -270,18 +270,18 @@ class CodeTransformer(Transformer):
 
         # sets the left compare to the true label
         block1[-1].jump_label = final_true
-        if type1 is not self.Compare.SIMPLE:
+        if type1 is not Compare.SIMPLE:
             # revert the compare to its original, both && and || negate the last item to jump to it's failed jump_label
             block1[-1].negate_jump()
 
-        if type2 == self.Compare.SIMPLE:
+        if type2 == Compare.SIMPLE:
             block2[-1].jump_label = final_fail
             block2[-1].negate_jump()
 
         if fail_label1 is not None:
             block1.append(CommandLabel(fail_label1))
 
-        return block1 + block2, (final_fail, final_true, self.Compare.LOGICAL_OR)
+        return block1 + block2, (final_fail, final_true, Compare.LOGICAL_OR)
 
     # --- loops declaration --------------------------
 
@@ -295,7 +295,7 @@ class CodeTransformer(Transformer):
             true_label = jump_manager.get_jump()
 
         condition_block[-1].jump_label = true_label
-        if compare_type != self.Compare.SIMPLE:
+        if compare_type != Compare.SIMPLE:
             # last compare _jumps if fail and rolls down if true, this is negating that
             # rolls down if false
             condition_block[-1].negate_jump()
@@ -378,7 +378,7 @@ class CodeTransformer(Transformer):
         returns a single list combining the comparison, main block, and labels
         """
         # the compare types does not have a label
-        if compare_type == self.Compare.SIMPLE:
+        if compare_type == Compare.SIMPLE:
             compare_block[-1].negate_jump()
             fail_label = jump_manager.get_jump()
             compare_block[-1].jump_label = fail_label

@@ -16,7 +16,9 @@ class Ram:
         # computed after ifetimes are computed
         self._lifetimes_stack: list[tuple[str, int]] = []
 
-        self.return_offset: int = shared_rtn.return_count[function_name] + 1
+        self.stack_offset = 2
+
+        self.return_offset: int = shared_rtn.return_count[function_name] + self.stack_offset
 
     def inner_start(self):
         """
@@ -93,7 +95,7 @@ class Ram:
 
     def _get_min(self) -> int:
         """
-        just gets the min of the key that is not used starting at 1
+        just gets the min of the key that is not used starting at 2
         """
         values = sorted([key for key in self._ram.values()])
         expected_value = self.return_offset
@@ -144,21 +146,23 @@ class Ram:
         Calling and returning function:
 
         base pointer for the current function starting at 0
+        return for the current function starting at 1
         ####################
-        reserved for returning for that function: example return a,b = 1-2
+        reserved for returning for that function: example return a,b = 2-3
         ####################
-        reserved the argument for that function: example current_func(a,b) = 3-4
+        reserved the argument for that function: example current_func(a,b) = 4-5
         ####################
-        reserved for functions locals and globals: example a = 8; b = 10; = 5-6
+        reserved for functions locals and globals: example a = 8; b = 10; = 6-7
         ####################
         reserved on CALLING example a,b = CALL new_function(a,b)
-        base pointer for the called function: = 7
+        base pointer for the called function: = 8
+        return for the called function: = 9
         ####################
-        reserved for returns for call = 8-9
+        reserved for returns for call = 10-11
         ####################
-        reserved for arguments for call = 10-11
+        reserved for arguments for call = 12-13
         ####################
-        reserved for future locals and globals on the call: 12-onwards
+        reserved for future locals and globals on the call: 14-onwards
         """
 
         final_command: list[Command] = []
@@ -176,7 +180,7 @@ class Ram:
 
                 var_location = self.allocate_helper(variable)
                 # gets the jump_label of the variable and put it in the right jump_label
-                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(index + 1), var_location)])
+                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(index + self.stack_offset), var_location)])
 
             # clean up before returning
             final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
@@ -192,7 +196,7 @@ class Ram:
             self.shared_rtn.validate_arg(cmd.call_label, len(cmd.source))
 
             sp: int = self.get_stack_pointer()
-            arg_offset: int = len(cmd.destination) + sp + 1
+            arg_offset: int = len(cmd.destination) + sp + self.stack_offset
 
             if cmd.call_label in ["VID_V", "VID_X", "VID_Y"]:
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)

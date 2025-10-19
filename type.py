@@ -12,14 +12,13 @@ class Operand(Enum):
 
     NOP = auto()
     HALT = auto()
-    VID = auto()  # set the color the video
-    VIDV = auto()  # set XTerm256 color model (8-bit)
+    VID_V = auto()  # set XTerm256 color model (8-bit)
     VIDV_R = auto()
     VIDV_RR = auto()
-    VIDX = auto()  # set the x-axis 16 pixels wide
+    VID_X = auto()  # set the x-axis 16 pixels wide
     VIDX_R = auto()
     VIDX_RR = auto()
-    VIDY = auto()  # set the y-axis 16 pixels tall
+    VID_Y = auto()  # set the y-axis 16 pixels tall
     VIDY_R = auto()
     VIDY_RR = auto()
     MOV = auto()  # move register, register
@@ -94,18 +93,18 @@ class Operand(Enum):
     SHR_L = auto()
     SHR_RI = auto()
     SHR_RR = auto()
-    RR = auto()
-    RR_R = auto()
-    RR_I = auto()
-    RR_L = auto()
-    RR_RI = auto()
-    RR_RR = auto()
     RL = auto()
     RL_R = auto()
     RL_I = auto()
     RL_L = auto()
     RL_RI = auto()
     RL_RR = auto()
+    RR = auto()
+    RR_R = auto()
+    RR_I = auto()
+    RR_L = auto()
+    RR_RI = auto()
+    RR_RR = auto()
     AR = auto()
     AR_R = auto()
     AR_I = auto()
@@ -164,7 +163,7 @@ class Operand(Enum):
         MOV_L = auto()  # move register, ram
         MOV_RI = auto()  # move ram, immediate
         """
-        if Operand.VIDV.value <= self.value <= Operand.VIDY_RR.value:
+        if Operand.VID_V.value <= self.value <= Operand.VIDY_RR.value:
             match source:
                 case int():
                     return self
@@ -191,7 +190,7 @@ class Operand(Enum):
                 return Operand(self.value + 5)
 
     def check_jump(self):
-        return Operand.JEQ.value <= self.value <= Operand.CALL.value
+        return Operand.JMP.value <= self.value <= Operand.CALL.value
 
     def check_arith(self):
         return Operand.ADD.value <= self.value <= Operand.NOT_R.value
