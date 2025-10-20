@@ -63,6 +63,8 @@ class Command:
             inst += 1
         if isinstance(self.source, RamVar) | isinstance(self.source, int):
             inst += 1
+        if isinstance(self.jump_label, int):
+            inst = 2
 
         return inst
 
@@ -84,7 +86,7 @@ class Command:
         if isinstance(self.destination, RegVar):
             binary_str += self.destination.val << 4
         if isinstance(self.source, RegVar):
-            binary_str += self.destination.val
+            binary_str += self.source.val
 
         part1 = self.number_string(binary_str)
 

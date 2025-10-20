@@ -48,6 +48,7 @@ def main():
             jump_manager.set_pos(cmd.jump_label, index)
         elif Operand.check_jump(cmd.operand):
             jump_manager.set_verify_jump(cmd.jump_label)
+            index += cmd.num_instruct()
         else:
             index += cmd.num_instruct()
 
