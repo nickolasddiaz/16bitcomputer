@@ -2,6 +2,23 @@
 
 A complete 16-bit Complex Instruction Set Computer (CISC) architecture implemented in Logic-SIM Evolution, with a custom high-level language compiler written in Python.
 
+✅ Compiler is finished
+
+❌ 16 bit logic-sim computer is not finished
+
+## How to run
+
+- `Command:` - python main.py
+
+Take input as code from:
+- `program.txt` - high level code
+
+The compiler generates three output files:
+   - `program.tre` - Parse tree visualization
+   - `program.asm` - Assembly code
+   - `program.bin` - Binary machine code (hex)
+
+
 
 ## Overview
 
@@ -312,8 +329,3 @@ Instructions support six addressing modes indicated by suffix:
 
 
 ```
-
-The compiler generates three output files:
-   - `program.tre` - Parse tree visualization
-   - `program.asm` - Assembly code
-   - `program.bin` - Binary machine code (hex)
