@@ -1,0 +1,15 @@
+def main()
+{
+  value = 9;
+  for(y = 1; y < 64; y++){
+    for(x = 1; x < 64; x++){
+        value += 100;
+        VID_X(x);
+        VID_V(value);
+    }
+    VID_Y(y);
+
+  }
+
+}
+
