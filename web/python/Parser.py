@@ -2,14 +2,14 @@ from typing import Any
 
 from lark import Transformer
 
-from command import Command, CommandJump, CommandLabel, CommandReturn, CommandInnerStart, CommandInnerEnd
-from jump_manager import jump_manager
-from memory_manager import Ram
-from shared_state import register_id, CompileHelper, SharedFunc
-from type import Operand, RamVar, base_pointer, stack_pointer, Compare
+from Command import Command, CommandJump, CommandLabel, CommandReturn, CommandInnerStart, CommandInnerEnd
+from JumpManager import jump_manager
+from MemoryManager import MemoryManager
+from SharedFunc import register_id, CompileHelper, SharedFunc
+from Type import Operand, RamVar, base_pointer, stack_pointer, Compare
 
 
-class CodeTransformer(Transformer):
+class Parser(Transformer):
     def __init__(self):
         super().__init__()
         self.compiler_helper = CompileHelper()
@@ -484,7 +484,7 @@ class CodeTransformer(Transformer):
         # validates the amount of arguments is consistent
         self.shared_rtn.validate_arg(function_name, len(function_arguments))
         # creates a class to process the commands
-        variable_process: Ram = Ram(function_name, self.compiler_helper, self.shared_rtn)
+        variable_process: MemoryManager = MemoryManager(function_name, self.compiler_helper, self.shared_rtn)
         # sets the arguments into ram
         variable_process.set_arguments(function_arguments)
 

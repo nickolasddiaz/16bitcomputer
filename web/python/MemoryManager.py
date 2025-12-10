@@ -1,12 +1,12 @@
 from collections import ChainMap
 
-from jump_manager import jump_manager
-from command import Command
-from type import Operand, RegVar, RamVar, stack_pointer, base_pointer
-from shared_state import register_id, CompileHelper, SharedFunc
+from JumpManager import jump_manager
+from Command import Command
+from Type import Operand, RegVar, RamVar, stack_pointer, base_pointer
+from SharedFunc import register_id, CompileHelper, SharedFunc
 
 
-class Ram:
+class MemoryManager:
     def __init__(self, function_name: str, compiler_helper: CompileHelper, shared_rtn: SharedFunc):
         self._ram: ChainMap[str, int] = ChainMap()
         self._lifetimes: dict[str, int] = dict()  # var_name, death

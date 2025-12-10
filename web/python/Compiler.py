@@ -8,19 +8,21 @@ assembly and binary code for a custom 16-bit architecture. The compiler handles:
 - Arithmetic and logical operations
 
 Main classes:
-    CodeTransformer: Transforms parse tree into assembly commands
-    Ram: Manages variable lifetime and memory allocation
+    Parser: Transforms parse tree into assembly commands
+    MemoryManager: Manages variable lifetime and memory allocation
     Command: Represents a single assembly instruction
     Operand: IntEnum of the instruction set
     Jump_Manager: Manages the function/statement jumps
 """
 import time
+from abc import ABC
 
 from lark import Lark
-from parser import CodeTransformer
-from jump_manager import jump_manager
-from type import Operand
-from abc import ABC, abstractmethod
+
+from JumpManager import jump_manager
+from Parser import Parser
+from Type import Operand
+
 
 class Compiler(ABC):
     def __init__(self, grammar: str):
@@ -37,7 +39,7 @@ class Compiler(ABC):
             parse_tree = code_parser.parse(program)
 
             # transform the parse tree into assembly
-            transformed = CodeTransformer().transform(parse_tree)
+            transformed = Parser().transform(parse_tree)
 
             # process what index set the labels
             index = 0

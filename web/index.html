@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <title>Nickolas's Compiler</title>
+
+        <!-- PyScript CSS and JS -->
+        <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+        <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+        <!-- load personal css -->
+        <link rel="stylesheet" href="styles.css">
+
+        <!-- PyScript main script -->
+        <script type="py" config="./pyscript.json" src="pythonJS.py"></script>
+
+    </head>
+    <body>
+        <h1>Nickolas's Compiler</h1>
+
+          <div id="loadingOverlay">
+            <div id="loadingBar">
+              <div id="loadingProgress"></div>
+            </div>
+          </div>
+
+        <button id="compile-btn" onclick="compileProgram()">Compile</button>
+
+        <label for="options"></label><select name="options" id="options" onchange="choose_starter_program()">
+                <option value="none">None</option>
+                <option value="raster_fill">Raster Fill</option>
+                <option value="Test">Test</option>
+        </select>
+
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
+            <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
+            <button class="tablinks" onclick="openTab(event, 'parse-tree')">Parse Tree</button>
+            <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
+            <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
+            <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
+        </div>
+
+        <label for="program"></label><textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
+        <label for="grammar"></label><textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
+        <label for="parse-tree"></label><textarea id="parse-tree" class="tab_content" name="parse-tree" readonly="readonly">Compile to see parse tree...</textarea>
+        <label for="assembly"></label><textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
+        <label for="binary"></label><textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
+        <label for="program-error"></label><textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
+
+
+        <div id="messageContainer" class="message-container"></div>
+
+        <script>
+            // logic to open tabs
+            function openTab(evt, name) {
+                let i, tabcontent, tablinks;
+                tabcontent = document.getElementsByClassName("tab_content");
+                for (i = 0; i < tabcontent.length; i++) {
+                    tabcontent[i].style.display = "none";
+                }
+                tablinks = document.getElementsByClassName("tablinks");
+                for (i = 0; i < tablinks.length; i++) {
+                    tablinks[i].className = tablinks[i].className.replace(" active", "");
+                }
+                document.getElementById(name).style.display = "block";
+                evt.currentTarget.className += " active";
+            }
+
+            // logic to choose starter program
+            async function choose_starter_program() {
+                const selectedValue = document.getElementById("options").value;
+
+                if (selectedValue === "none") {
+                    document.getElementById('program').value = "// Enter your program here"
+                    return;
+                }
+
+                await fetch("./examples/" + selectedValue + ".txt")
+                    .then(async response =>
+                        document.getElementById('program').value = await response.text())
+                    .catch(error => displayMessage('Error fetching file:'+ error, "error"));
+
+                }
+            // loading bar
+            window.addEventListener('load', function() {
+              // Simulate progress for visual effect (as actual progress isn't available)
+                let progress = 0;
+                const interval = setInterval(function () {
+                    progress += 10;
+                    document.getElementById('loadingProgress').style.width = progress + '%';
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        document.getElementById('loadingOverlay').style.display = 'none';
+                    }
+                }, 100);
+            });
+
+            // Display message if it failed or succeeded at the bottom of the page
+            function displayMessage(message, type) {
+                const messageContainer = document.getElementById('messageContainer');
+
+                messageContainer.className = 'message-container';
+                messageContainer.textContent = '';
+
+                messageContainer.classList.add('show', type);
+                messageContainer.textContent = message;
+            }
+
+            // Disable compile button initially
+            document.addEventListener('DOMContentLoaded', function() {
+                document.getElementById('compile-btn').disabled = true;
+                document.getElementById('options').disabled = true;
+            });
+        </script>
+    </body>
+</html>

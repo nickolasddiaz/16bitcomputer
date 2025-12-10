@@ -1,5 +1,6 @@
 from pathlib import Path
-from compiler import Compiler
+
+from Compiler import Compiler
 
 
 class LocalInterface(Compiler):
@@ -30,24 +31,25 @@ class LocalInterface(Compiler):
         return grammar_file.read_text()
 
     def get_program(self) -> str:
-        grammar_file = Path('examples/example.txt')
+        grammar_file = Path('../examples/raster_fill.txt')
         return grammar_file.read_text()
 
     def write_parse_tree(self, parse_tree:str) -> None:
-        Path('program.tre').write_text(parse_tree)
+        Path('../../program.tre').write_text(parse_tree)
 
     def write_assembly(self, asm_str: str) -> None:
-        Path('program.asm').write_text(asm_str)
+        Path('../../program.asm').write_text(asm_str)
 
     def write_binary(self, binary_str: str) -> None:
-        Path('program.bin').write_text(binary_str)
+        Path('../../program.bin').write_text(binary_str)
 
     def write_error(self, error_str: str) -> None:
         print(f"\033[31m{error_str}\033[0m")
-        Path('program.error').write_text(error_str)
+        Path('../../program.error').write_text(error_str)
 
     def print_success(self, execution_time: float) -> None:
-        print(f"Program successfully compiled! Execution time: {execution_time:.6f} seconds!")
+        print(f"Program successfully compiled! Execution time: {execution_time:.6f} seconds!"
+              f"\nFiles saved to program.tre, program.asm and program.bin.")
 
 
 if __name__ == "__main__":

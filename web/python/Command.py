@@ -1,7 +1,7 @@
 from functools import partial
 
-from type import Operand, RegVar, RamVar
-from jump_manager import jump_manager
+from Type import Operand, RegVar, RamVar
+from JumpManager import jump_manager
 
 class Command:
     def __init__(self, op, dest=None, source=None, jump_label= None):

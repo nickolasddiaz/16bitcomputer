@@ -1,7 +1,7 @@
 import heapq
 
-from command import Command
-from type import Operand
+from Command import Command
+from Type import Operand
 
 # any string that starts off with # will be a register
 register_id = "#"
