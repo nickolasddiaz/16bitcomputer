@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1.0">
-        <title>Nickolas's Compiler</title>
+        <title>Nickolas' Compiler</title>
 
         <!-- PyScript CSS and JS -->
         <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
@@ -15,9 +15,12 @@
         <!-- PyScript main script -->
         <script type="py" config="./pyscript.json" src="pythonJS.py"></script>
 
+        <!-- emulator script
+        <script src="./emulator.js"></script>-->
+
     </head>
     <body>
-        <h1>Nickolas's Compiler</h1>
+        <h1>Nickolas' Compiler</h1>
 
           <div id="loadingOverlay">
             <div id="loadingBar">
@@ -30,8 +33,10 @@
         <label for="options"></label><select name="options" id="options" onchange="choose_starter_program()">
                 <option value="none">None</option>
                 <option value="raster_fill">Raster Fill</option>
-                <option value="Test">Test</option>
+                <option value="gradient">gradient</option>
         </select>
+
+        <div id="messageContainer" class="message-container"></div>
 
         <div class="tab">
             <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
@@ -40,17 +45,22 @@
             <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
             <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
             <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
+            <button class="tablinks" onclick="openTab(event, 'computer')">Output</button>
+
         </div>
 
-        <label for="program"></label><textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
-        <label for="grammar"></label><textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
-        <label for="parse-tree"></label><textarea id="parse-tree" class="tab_content" name="parse-tree" readonly="readonly">Compile to see parse tree...</textarea>
-        <label for="assembly"></label><textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
-        <label for="binary"></label><textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
-        <label for="program-error"></label><textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
+        <textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
+        <textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
+        <textarea id="parse-tree" class="tab_content" name="parse-tree" readonly="readonly">Compile to see parse tree...</textarea>
+        <textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
+        <textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
+        <textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
+
+        <div id="computer">
+            <canvas id="pixelCanvas" class="tab_content" width="64" height="64"></canvas>
+        </div>
 
 
-        <div id="messageContainer" class="message-container"></div>
 
         <script>
             // logic to open tabs

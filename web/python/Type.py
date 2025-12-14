@@ -12,10 +12,17 @@ class Operand(Enum):
 
     NOP = auto()
     HALT = auto()
-    VID_V = auto()  # set XTerm256 color model (8-bit)
-    VIDV_R = auto()
-    VIDV_RR = auto()
-    VID_X = auto()  # set the x-axis 16 pixels wide
+    VID = auto()
+    VID_RED = auto() #imm8
+    VID_RED_R = auto() # register
+    VID_RED_RR = auto() # ram
+    VID_GREEN = auto()
+    VID_GREEN_R = auto()
+    VID_GREEN_RR = auto()
+    VID_BLUE = auto()
+    VID_BLUE_R = auto()
+    VID_BLUE_RR = auto()
+    VID_X = auto()  # set the x-axis 64 pixels wide
     VIDX_R = auto()
     VIDX_RR = auto()
     VID_Y = auto()  # set the y-axis 16 pixels tall
@@ -93,35 +100,11 @@ class Operand(Enum):
     SHR_L = auto()
     SHR_RI = auto()
     SHR_RR = auto()
-    RL = auto()
-    RL_R = auto()
-    RL_I = auto()
-    RL_L = auto()
-    RL_RI = auto()
-    RL_RR = auto()
-    RR = auto()
-    RR_R = auto()
-    RR_I = auto()
-    RR_L = auto()
-    RR_RI = auto()
-    RR_RR = auto()
-    AR = auto()
-    AR_R = auto()
-    AR_I = auto()
-    AR_L = auto()
-    AR_RI = auto()
-    AR_RR = auto()
-    NEG = auto()
-    NEG_R = auto()
-    NEG_I = auto()
-    NEG_L = auto()
-    NEG_RI = auto()
-    NEG_RR = auto()
+    NEG = auto() # imm8
+    NEG_R = auto() # reg
+    NEG_RR = auto() # ram
     NOT = auto()
     NOT_R = auto()
-    NOT_I = auto()
-    NOT_L = auto()
-    NOT_RI = auto()
     NOT_RR = auto()
     JMP = auto()
     JEQ = auto()
@@ -130,10 +113,6 @@ class Operand(Enum):
     JLE = auto()
     JL = auto()
     JGE = auto()
-    JNZ = auto()
-    JZ = auto()
-    JNC = auto()
-    JC = auto()
     CALL = auto()
     RTRN = auto()
     # below Operands are helpers
@@ -163,7 +142,7 @@ class Operand(Enum):
         MOV_L = auto()  # move register, ram
         MOV_RI = auto()  # move ram, immediate
         """
-        if Operand.VID_V.value <= self.value <= Operand.VIDY_RR.value:
+        if Operand.VID.value <= self.value <= Operand.VIDY_RR.value:
             match source:
                 case int():
                     return self
@@ -226,3 +205,9 @@ class Compare(IntEnum):
     SIMPLE = auto()
     LOGICAL_AND = auto()
     LOGICAL_OR = auto()
+
+if __name__ == "__main__":
+    print("let temp = [")
+    for command in Operand:
+        print(f"[this.{command.name}, DATA.RAM], ", end="")
+    print("];")

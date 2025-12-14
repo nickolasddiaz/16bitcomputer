@@ -198,16 +198,22 @@ class MemoryManager:
             sp: int = self.get_stack_pointer()
             arg_offset: int = len(cmd.destination) + sp + self.stack_offset
 
-            if cmd.call_label in ["VID_V", "VID_X", "VID_Y"]:
+            if cmd.call_label in ["VID"]:
+                return [Command(Operand[cmd.call_label])]
+            elif cmd.call_label in ["VID_RED","VID_GREEN","VID_BLUE", "VID_X", "VID_Y"]:
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)
                 return var_lists + [Command(Operand[cmd.call_label], variable)]
             elif cmd.call_label == "VIDEO":
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)
                 variable1, var_lists1 = self.complex_commands_helper(cmd.source[1], instruction, function_name)
                 variable2, var_lists2 = self.complex_commands_helper(cmd.source[2], instruction, function_name)
-                return (var_lists + [Command(Operand.VIDV, variable)]
-                        + var_lists1 + [Command(Operand.VIDX, variable1)]
-                        + var_lists2 + [Command(Operand.VIDY, variable2)]
+                variable3, var_lists3 = self.complex_commands_helper(cmd.source[3], instruction, function_name)
+                variable4, var_lists4 = self.complex_commands_helper(cmd.source[4], instruction, function_name)
+                return (var_lists + [Command(Operand.VID_RED, variable)]
+                        + var_lists1 + [Command(Operand.VID_GREEN, variable1)]
+                        + var_lists2 + [Command(Operand.VID_BLUE, variable2)]
+                        + var_lists3 + [Command(Operand.VID_X, variable1)]
+                        + var_lists4 + [Command(Operand.VID_Y, variable2)]
                         + [Command(Operand.VID)])
 
             # compute the arguments

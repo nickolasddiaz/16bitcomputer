@@ -13,8 +13,8 @@ class SharedFunc:
     Raises error if it doesn't
     """
     def __init__(self):
-        self.return_count: dict[str, int] = {"main": 0, "VID": 0, "VID_V": 0, "VID_X": 0, "VID_Y": 0, "VIDEO": 0, "HALT": 0}
-        self.arg_count: dict[str, int] = {"main": 0, "VID": 0, "VID_V": 1, "VID_X": 1, "VID_Y": 1, "VIDEO": 3, "HALT": 0}
+        self.return_count: dict[str, int] = {"main": 0, "VID": 0, "VID_RED": 0,"VID_GREEN": 0,"VID_BLUE": 0, "VID_X": 0, "VID_Y": 0, "VIDEO": 0, "HALT": 0}
+        self.arg_count: dict[str, int] = {"main": 0, "VID": 0, "VID_RED": 1,"VID_GREEN": 1,"VID_BLUE": 1, "VID_X": 1, "VID_Y": 1, "VIDEO": 5, "HALT": 0}
 
     def validate_return(self, func_name: str, amount_returned):
         """

@@ -6,12 +6,6 @@ A complete 16-bit Complex Instruction Set Computer (CISC) architecture implement
 
 ❌ 16 bit logic-sim computer is not finished
 
-## How to run
-
-- `Command:` - python main.py
-
-Take input as code from:
-- `program.txt` - high level code
 
 The compiler generates three output files:
    - `program.tre` - Parse tree visualization
@@ -19,15 +13,14 @@ The compiler generates three output files:
    - `program.bin` - Binary machine code (hex)
 
 
-
 ## Overview
 
 This project implements a fully functional 16-bit CISC processor with:
 - Custom microcode architecture designed in Logic-SIM Evolution
-- High-level programming language with C-style syntax
+- High-level programming language with C/python-style syntax
 - Python-based compiler that generates assembly and binary code
-- 126 instruction opcodes supporting arithmetic, logic, control flow, and I/O operations
-- 16×16 RGB video display with 256-color support
+- 114 instruction opcodes supporting arithmetic, logic, control flow, and I/O operations
+- 64×64 RGB video display
 
 ## Features
 
@@ -43,24 +36,22 @@ This project implements a fully functional 16-bit CISC processor with:
 
 ### Hardware Specifications
 
-| Component              | Specification                                   |
-|------------------------|-------------------------------------------------|
-| **Architecture**       | 16-bit CISC with microcode                      |
-| **Instruction Memory** | 65,536 (0xFFFF) instructions                    |
-| **Registers**          | 16 general-purpose (R0-R15)                     |
-| **RAM**                | 65,535 (0xFFFF) × 16-bit words                  |
-| **Video Display**      | 16×16 pixels, XTerm256 color model (8-bit)      |
-| **Status Flags**       | Greater, Equal, Less, Zero, Carry               |
-| **Data Type**          | 16-bit signed integer (-32,768 to 32,767)       |
-| **Opcode Count**       | 128 instructions (0x00-0x7F)                    |
+| Component              | Specification                             |
+|------------------------|-------------------------------------------|
+| **Architecture**       | 16-bit CISC with microcode                |
+| **Instruction Memory** | 65,536 (0xFFFF) instructions              |
+| **Registers**          | 16 general-purpose (R0-R15)               |
+| **RAM**                | 65,535 (0xFFFF) × 16-bit words            |
+| **Video Display**      | 16×16 pixels, RGB 555 (15-bit)            |
+| **Status Flags**       | Greater, Equal, Less, Carry               |
+| **Data Type**          | 16-bit signed integer (-32,768 to 32,767) |
+| **Opcode Count**       | 114 instructions                          |
 
 ### Register Conventions
 
 | Register | Mnemonic | Purpose                    |
 |----------|----------|----------------------------|
-| R0-R11   | -        | General purpose registers  |
-| R12      | RC       | System timer               |
-| R13      | RD       | User input/control         |
+| R0-R13   | -        | General purpose registers  |
 | R14      | RE (BP)  | Base pointer (stack frame) |
 | R15      | RF (SP)  | Stack pointer              |
 
@@ -69,9 +60,7 @@ This project implements a fully functional 16-bit CISC processor with:
 - **Greater (G)**: Set when first operand > second operand
 - **Equal (E)**: Set when operands are equal
 - **Less (L)**: Set when first operand < second operand
-- **Zero (Z)**: Set when result equals zero
 - **Carry (C)**: Set when arithmetic operation produces carry/borrow
-- **Negative (N)**: Set when arithmetic operation is negative
 
 ## Language Specification
 
@@ -154,6 +143,8 @@ a, b, c, d, e = a, 2, function_name(a, b);
 - `|` Bitwise OR
 - `^` Bitwise XOR
 - `~` Bitwise NOT (one's complement)
+- `<<`Left shift
+- `>>`Right shift
 
 #### Comparison Operators
 - `==` Equal to
@@ -180,9 +171,11 @@ a, b, c, d, e = a, 2, function_name(a, b);
 
 #### Video Functions
 ```c
-VIDEO(value, x, y)  // Set pixel at (x, y) to color value
+VIDEO(r,g,b, x, y)  // Set pixel at (x, y) to color value
 VID()               // Update video display
-VID_V(value)        // Set color value
+VID_RED(value)        // Set color value
+VID_GREEN(value)        // Set color value
+VID_BLUE(value)        // Set color value
 VID_X(x)            // Set X coordinate
 VID_Y(y)            // Set Y coordinate
 ```
@@ -191,11 +184,6 @@ VID_Y(y)            // Set Y coordinate
 ```c
 HALT()              // Halt the computer
 ```
-
-### Built-in Variables
-
-- `CONTROL` - User input register (R13)
-- `TIME` - System timer register (R12)
 
 ### Syntax Examples
 
@@ -240,77 +228,74 @@ if (a == b + 6 || function_call() != 21) {  // Logical OR
 
 ### Video Display Instructions
 
-| Opcode | Mnemonic    | Description             |
-|--------|-------------|-------------------------|
-| `0x02` | `VID_V reg` | Set video value (color) and updates video display |
-| `0x05` | `VID_X reg` | Set video X coordinate  |
-| `0x08` | `VID_Y reg` | Set video Y coordinate  |
+| Opcode | Mnemonic        | Description                    |
+|--------|-----------------|--------------------------------|
+| `0x01` | `VID`           | Updates the pixel with a color |
+| `0x03` | `VID_RED reg`   | Set video Red  0-31            |
+| `0x06` | `VID_GREEN reg` | Set video Blue  0-31           |
+| `0x09` | `VID_BLUE reg`  | Set video Green  0-31          |
+| `0x0C` | `VID_X reg`     | Set video X coordinate 0-63    |
+| `0x0F` | `VID_Y reg`     | Set video Y coordinate 0-63    |
 
 ### Data Movement Instructions
 
 | Opcode | Mnemonic       | Description               |
 |--------|----------------|---------------------------|
-| `0x0B` | `MOV reg, reg` | Move register to register |
+| `0x12` | `MOV reg, reg` | Move register to register |
 
 
 ### Comparison Instructions
 
 | Opcode | Mnemonic       | Description                        |
 |--------|----------------|------------------------------------|
-| `0x11` | `CMP reg, reg` | Compare two registers (sets flags) |
+| `0x18` | `CMP reg, reg` | Compare two registers (sets flags) |
 
 ### Arithmetic Instructions
 
 #### Addition
 | Opcode | Mnemonic        | Description                                   |
 |--------|-----------------|-----------------------------------------------|
-| `0x17` | `ADD reg, reg`  | input1 = input1 + input2                      |
-| `0x1D` | `SUB reg, reg`  | input1 = input1 - input2                      |
-| `0x23` | `MULT reg, reg` | input1 = input1 * input2                      |
-| `0x29` | `DIV reg, reg`  | input1 = input1 / input2                      |
-| `0x2F` | `QUOT reg, reg` | input1 = input1 mod input2                    |
-| `0x35` | `AND reg`       | input1 = input1 bit and input2                |
-| `0x3B` | `OR reg, reg`   | input1 = input1 bit or input2                 |
-| `0x41` | `XOR reg, reg`  | input1 = input1 bit xor input2                |
-| `0x47` | `SHL reg, reg`  | input1 = input1 shift left input2             |
-| `0x4D` | `SHR reg, reg`  | input1 = input1 shift right input2            |
-| `0x53` | `RL reg, reg`   | input1 = input1 rotate Left input2           |
-| `0x59` | `RR reg, reg`   | input1 = input1 rotate right input2            |
-| `0x5F` | `AR reg, reg`   | input1 = input1 arithmetic right shift input2 |
-| `0x65` | `NEG reg, reg`  | input1 = negate input2                        |
-| `0x6B` | `NOT reg, reg`  | input1 = not input2                           |
+| `0x1E` | `ADD reg, reg`  | input1 = input1 + input2                      |
+| `0x24` | `SUB reg, reg`  | input1 = input1 - input2                      |
+| `0x2A` | `MULT reg, reg` | input1 = input1 * input2                      |
+| `0x30` | `DIV reg, reg`  | input1 = input1 / input2                      |
+| `0x36` | `QUOT reg, reg` | input1 = input1 mod input2                    |
+| `0x3C` | `AND reg`       | input1 = input1 bit and input2                |
+| `0x42` | `OR reg, reg`   | input1 = input1 bit or input2                 |
+| `0x48` | `XOR reg, reg`  | input1 = input1 bit xor input2                |
+| `0x4E` | `SHL reg, reg`  | input1 = input1 shift left input2             |
+| `0x54` | `SHR reg, reg`  | input1 = input1 shift right input2            |
+| `0x5A` | `NEG reg, reg`  | input1 = negate input2                        |
+| `0x60` | `NOT reg, reg`  | input1 = not input2                           |
 
 ### Control Flow Instructions
 
 #### Jump Instructions
 | Opcode | Mnemonic         | Description                          |
 |--------|------------------|--------------------------------------|
-| `0x71` | `JMP imm8`       | Unconditional jump to 16-bit address |
-| `0x72` | `JEQ imm8`       | Jump if equal flag set               |
-| `0x73` | `JNE imm8`       | Jump if not equal                    |
-| `0x74` | `JG imm8`        | Jump if greater                      |
-| `0x75` | `JLE imm8`       | Jump if less or equal                |
-| `0x76` | `JL imm8`        | Jump if less                         |
-| `0x77` | `JGE imm8`       | Jump if greater or equal             |
-| `0x78` | `JNZ imm8`       | Jump if zero flag not set            |
-| `0x79` | `JZ imm8`        | Jump if zero flag set                |
-| `0x7A` | `JNC imm8`       | Jump if carry flag not set           |
-| `0x7B` | `JC imm8`        | Jump if carry flag set               |
-| `0x7C` | `JN imm8`        | Jump if negative                     |
-| `0x7D` | `JP imm8`        | Jump if positive                     |
+| `0x66` | `JMP imm8`       | Unconditional jump to 16-bit address |
+| `0x67` | `JEQ imm8`       | Jump if equal flag set               |
+| `0x68` | `JNE imm8`       | Jump if not equal                    |
+| `0x69` | `JG imm8`        | Jump if greater                      |
+| `0x6A` | `JLE imm8`       | Jump if less or equal                |
+| `0x6B` | `JL imm8`        | Jump if less                         |
+| `0x6C` | `JGE imm8`       | Jump if greater or equal             |
+| `0x6D` | `JNZ imm8`       | Jump if zero flag not set            |
+| `0x6E` | `JZ imm8`        | Jump if zero flag set                |
+| `0x6F` | `JNC imm8`       | Jump if carry flag not set           |
+| `0x70` | `JC imm8`        | Jump if carry flag set               |
 
 #### Subroutine Instructions
 | Opcode | Mnemonic          | Description                             |
 |--------|-------------------|-----------------------------------------|
-| `0x7E` | `CALL imm8       `| Push return address, jump to subroutine |
-| `0x7F` | `RTRN`            | Pop return address into PC              |
+| `0x71` | `CALL imm8       `| Push return address, jump to subroutine |
+| `0x72` | `RTRN`            | Pop return address into PC              |
 
 ## Register Conventions
 
 | Register | Purpose         |
 |----------|-----------------|
-| R0-RB    | General Purpose |
-| RC       | Time            |
+| R0-RC    | General Purpose |
 | RD       | User Input      |
 | RE       | Base Pointer    |
 | RF       | Stack Pointer   |
@@ -327,5 +312,3 @@ Instructions support six addressing modes indicated by suffix:
 | _MI    | Memory-Immediate   | `ADD [BP+5], 10`     | Dest is memory, source is immediate       |
 | _MM    | Memory-Memory      | `ADD [BP+5], [BP+7]` | Both operands are memory                  |
 
-
-```

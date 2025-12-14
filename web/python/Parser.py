@@ -91,6 +91,10 @@ class Parser(Transformer):
                     return product1 | product2
                 case Operand.XOR:
                     return product1 ^ product2
+                case Operand.SHL:
+                    return product1 << product2
+                case Operand.SHR:
+                    return product1 >> product2
                 case _:
                     raise ValueError(f"Cannot move an integer {product1} into an integer {product2} for this operand {op}")
 
@@ -140,6 +144,10 @@ class Parser(Transformer):
         return self.process_binary_operation(items[0], items[1], Operand.DIV)
     def quot(self, items):
         return self.process_binary_operation(items[0], items[1], Operand.QUOT)
+    def left_shift(self, items):
+        return self.process_binary_operation(items[0], items[1], Operand.SHL)
+    def right_shift(self, items):
+        return self.process_binary_operation(items[0], items[1], Operand.SHR)
 
     
     def increment(self, items) -> list[Command]:

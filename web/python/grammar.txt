@@ -57,6 +57,9 @@
     | product "&" atom -> bit_and
     | product "|" atom -> bit_or
     | product "^" atom -> bit_xor
+    | product "<<" atom -> left_shift
+    | product ">>" atom -> right_shift
+
 
 ?atom: NUMBER -> number
     | HEX -> hex_number
@@ -75,3 +78,6 @@
 %import python.HEX_NUMBER -> HEX
 %ignore WS_INLINE
 %ignore NEWLINE
+
+COMMENT: "//" /[^\n]*/
+%ignore COMMENT
