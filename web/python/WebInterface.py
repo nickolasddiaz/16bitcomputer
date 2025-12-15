@@ -18,7 +18,7 @@ class WebInterface(Compiler):
         return {
             "tree": str(tree),
             "assembly": str(assembly),
-            "binary": str(binary),
+            "binary": binary,
             "error": str(error),
             "execution_time": float(execution_time) if execution_time is not None else None
         }
