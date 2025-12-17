@@ -1,15 +1,17 @@
 export declare class emulator {
+    set program(hex_string: string);
     set timer(value: number);
     private readonly ram;
     private canvas;
     private status_flags;
     private register;
     private pc;
-    private readonly program;
+    private _program;
     private stop;
     private op;
     private _timer;
-    constructor(canvas: HTMLCanvasElement, greater_element: HTMLElement, equal_element: HTMLElement, less_element: HTMLElement, register_id: HTMLElement[], program_counter_element: HTMLElement, program: Uint16Array<ArrayBuffer>);
+    reset(): void;
+    constructor(canvas: HTMLCanvasElement, greater_element: HTMLElement, equal_element: HTMLElement, less_element: HTMLElement, register_id: HTMLElement[], program_counter_element: HTMLElement);
     run(): Promise<void>;
     save_ram(index: number, value: number): void;
     MOV(value1: number, _value2: number, set: CallableFunction): void;
@@ -23,6 +25,8 @@ export declare class emulator {
     XOR(value1: number, value2: number, set: CallableFunction): void;
     SHL(value1: number, value2: number, set: CallableFunction): void;
     SHR(value1: number, value2: number, set: CallableFunction): void;
+    NEG(value1: number, value2: number, set: CallableFunction): void;
+    NOT(value1: number, value2: number, set: CallableFunction): void;
     JEQ(value: number): void;
     JNE(value: number): void;
     JG(value: number): void;
@@ -31,8 +35,6 @@ export declare class emulator {
     JGE(value: number): void;
     CALL(value: number): void;
     RTRN(): void;
-    NEG(value: number, set: CallableFunction): void;
-    NOT(value: number, set: CallableFunction): void;
     NOP(): void;
     HALT(): void;
 }

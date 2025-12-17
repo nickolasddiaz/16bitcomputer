@@ -213,7 +213,5 @@ class Compare(IntEnum):
     LOGICAL_OR = auto()
 
 if __name__ == "__main__":
-    print("let temp = [")
-    for command in Operand:
-        print(f"[this.{command.name}, DATA.RAM], ", end="")
-    print("];")
+    for index, command in enumerate(Operand):
+        print(f"{index}:{command.name}")

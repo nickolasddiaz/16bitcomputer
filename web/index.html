@@ -33,6 +33,7 @@
           <option value="raster_fill">Raster Fill</option>
           <option value="gradient">gradient</option>
         </select>
+        <button id="run-program"> Run Program</button>
         <div id="messageContainer" class="message-container"></div>
         <div class="tab">
           <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
@@ -94,35 +95,51 @@
 
         <script type="module">
             import { emulator } from './emulator.js';
-            let tbody = document.getElementById("register_id");
-            let registers = new Array(16);
-            for (let i = 0; i < 16; i++){
-                const tr = document.createElement('tr');
-                const name = document.createElement('td');
-                name.textContent = `R${i}`;
-                const value = document.createElement('td');
-                tr.appendChild(name);
-                tr.appendChild(value);
-                tbody.appendChild(tr);
-                value.textContent = "0";
-                registers[i] = value;
+
+            let computer;
+
+            document.addEventListener('DOMContentLoaded', () => {
+                // Initialize registers table
+                let tbody = document.getElementById("register_id");
+                let registers = new Array(16);
+                for (let i = 0; i < 16; i++){
+                    const tr = document.createElement('tr');
+                    const name = document.createElement('td');
+                    name.textContent = `R${i}`;
+                    const value = document.createElement('td');
+                    tr.appendChild(name);
+                    tr.appendChild(value);
+                    tbody.appendChild(tr);
+                    value.textContent = "0";
+                    registers[i] = value;
+                }
+
+                computer = new emulator(
+                    document.getElementById("pixelCanvas"),
+                    document.getElementById("greater_id"),
+                    document.getElementById("equal_id"),
+                    document.getElementById("less_id"),
+                    registers, // table of 16
+                    document.getElementById("pc_id"),
+                );
+
+                let runButton = document.getElementById("run-program");
+                runButton.onclick = runProgram; // Reference the function
+
+                document.getElementById('compile-btn').disabled = false;
+                document.getElementById('options').disabled = false;
+                document.getElementById('run-program').disabled = false;
+            });
+
+            // Function to run the program (now in the module scope)
+            function runProgram(){
+                computer.program = document.getElementById('binary').value;
+                computer.reset();
+                computer.run();
             }
 
-            let computer = new emulator(document.getElementById("pixelCanvas"),
-                document.getElementById("greater_id"), document.getElementById("equal_id"), document.getElementById("less_id"),
-                registers, // table of 16
-                document.getElementById("pc_id"),
-                document.getElementById('binary').value
-            );
-
-
-        </script>
-
-
-
-        <script>
-            // logic to open tabs
-            function openTab(evt, name) {
+            window.runProgram = runProgram;
+            window.openTab = (evt, name) => {
                 let i, tabcontent, tablinks;
                 tabcontent = document.getElementsByClassName("tab_content");
                 for (i = 0; i < tabcontent.length; i++) {
@@ -134,26 +151,30 @@
                 }
                 document.getElementById(name).style.display = "block";
                 evt.currentTarget.className += " active";
-            }
+            };
 
-            // logic to choose starter program
-            async function choose_starter_program() {
+            window.choose_starter_program = async () => {
                 const selectedValue = document.getElementById("options").value;
-
                 if (selectedValue === "none") {
                     document.getElementById('program').value = "// Enter your program here"
                     return;
                 }
-
                 await fetch("./examples/" + selectedValue + ".txt")
                     .then(async response =>
                         document.getElementById('program').value = await response.text())
                     .catch(error => displayMessage('Error fetching file:'+ error, "error"));
+            };
 
-                }
+            window.displayMessage = (message, type) => {
+                const messageContainer = document.getElementById('messageContainer');
+                messageContainer.className = 'message-container';
+                messageContainer.textContent = '';
+                messageContainer.classList.add('show', type);
+                messageContainer.textContent = message;
+            };
+
             // loading bar
             window.addEventListener('load', function() {
-              // Simulate progress for visual effect (as actual progress isn't available)
                 let progress = 0;
                 const interval = setInterval(function () {
                     progress += 10;
@@ -165,23 +186,7 @@
                 }, 100);
             });
 
-            // Display message if it failed or succeeded at the bottom of the page
-            function displayMessage(message, type) {
-                const messageContainer = document.getElementById('messageContainer');
 
-                messageContainer.className = 'message-container';
-                messageContainer.textContent = '';
-
-                messageContainer.classList.add('show', type);
-                messageContainer.textContent = message;
-            }
-
-            // Disable compile button initially
-            document.addEventListener('DOMContentLoaded', function() {
-                document.getElementById('compile-btn').disabled = true;
-                document.getElementById('options').disabled = true;
-
-            });
         </script>
     </body>
 </html>

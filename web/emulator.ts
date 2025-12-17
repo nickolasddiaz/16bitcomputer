@@ -1,20 +1,31 @@
 const CANVAS_SIZE: number = 64;
 const COLOR_SIZE: number = 32;
-const REG_SIZE: number = 0xF;
-const INSTRUCTION_BUS: number = 0xF;
+const REG_SIZE: number = 16;
 const STACK_POINTER: number = 15;
 
 
-enum DATA {
-    None, IMM8, REG, RAM,
-    REG_REG, REG_IMM8, REG_RAM, RAM_REG, RAM_IMM8, RAM_RAM
-}
+const DATA = {
+    None:0, IMM8:1, REG:2, RAM:3,
+    REG_REG:4, REG_IMM8:5, REG_RAM:6, RAM_REG:7, RAM_IMM8:8, RAM_RAM:9
+}  as const;
+
+type DataType = typeof DATA[keyof typeof DATA];
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export class emulator{
+    set program(hex_string: string) {
+        hex_string = hex_string.replace(/\s/g, '');
+
+          const uint16Array = new Uint16Array(hex_string.length / 4);
+          for (let i = 0; i < hex_string.length; i += 4) {
+            const hexChunk = hex_string.substring(i, i + 4);
+            uint16Array[i / 4] = parseInt(hexChunk, 16);
+          }
+        this._program = uint16Array;
+    }
     set timer(value: number) {
         this._timer = value;
     }
@@ -23,67 +34,77 @@ export class emulator{
     private status_flags: StatusFlags;
     private register: Register;
     private pc: ProgramCounter;
-    private readonly program: Uint16Array<ArrayBuffer>;
+    private _program!: Uint16Array<ArrayBuffer>;
     private stop: boolean;
     private op: any;
     private _timer: number;
 
+    reset(){
+        this.canvas.reset();
+        this.status_flags.reset();
+        this.ram.fill(0);
+        this.register.reset();
+        this.pc.reset();
+        this.stop = true;
+    }
+
     constructor(canvas: HTMLCanvasElement,
                 greater_element: HTMLElement, equal_element: HTMLElement, less_element: HTMLElement,
                 register_id: HTMLElement[],
-                program_counter_element: HTMLElement,
-                program: Uint16Array<ArrayBuffer>) {
+                program_counter_element: HTMLElement) {
 
         this.ram = new Uint16Array(0xFFFF);
         this.canvas = new Canvas(canvas);
         this.status_flags = new StatusFlags(greater_element, equal_element, less_element);
         this.register = new Register(register_id);
         this.pc = new ProgramCounter(program_counter_element);
-        this.program = program;
         this.stop = true;
         this.op= new Map<number, [any, number]>();
         this._timer = 10;
+        this.program = "";
 
         let arith_data = [DATA.REG_REG, DATA.RAM_REG, DATA.REG_IMM8, DATA.REG_RAM, DATA.RAM_IMM8, DATA.RAM_RAM];
-        let arith = [this.MOV, this.status_flags.CMP, this.ADD, this.SUB, this.MULT, this.DIV, this.QUOT, this.AND, this.OR, this.XOR, this.SHL, this.SHR, this.NEG, this.NOT];
+        let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
 
         let one_data = [DATA.IMM8, DATA.REG, DATA.RAM];
-        let one = [this.canvas.VID, this.canvas.VID_RED, this.canvas.VID_GREEN, this.canvas.VID_BLUE, this.canvas.VID_X, this.canvas.VID_Y];
+        let one = [this.canvas.VID_RED.bind(this.canvas), this.canvas.VID_GREEN.bind(this.canvas), this.canvas.VID_BLUE.bind(this.canvas), this.canvas.VID_X.bind(this.canvas), this.canvas.VID_Y.bind(this.canvas)];
 
-        let jump = [this.pc.JMP, this.JEQ, this.JNE, this.JG, this.JLE, this.JL, this.JGE, this.CALL]
+        let jump = [ this.pc.JMP.bind(this.pc), this.JEQ.bind(this), this.JNE.bind(this), this.JG.bind(this), this.JLE.bind(this), this.JL.bind(this), this.JGE.bind(this), this.CALL.bind(this) ];
 
         let i = 0;
 
-        this.op.set(i++, [this.NOP, DATA.None]);
-        this.op.set(i++, [this.HALT, DATA.None]);
+        this.op.set(i++, [this.NOP.bind(this), DATA.None]);
+        this.op.set(i++, [this.HALT.bind(this), DATA.None]);
+        this.op.set(i++, [this.canvas.VID.bind(this.canvas), DATA.None]);
 
-        for (const op in one_data){
-            for (const data in one) {
+        for (const op of one) {
+            for (const data of one_data){
                 this.op.set(i++, [op, data]);
             }
         }
 
-        for (const op in arith){
-            for (const data in arith_data) {
+        for (const op of arith){
+            for (const data of arith_data) {
                 this.op.set(i++, [op, data]);
             }
         }
 
-        for (const op in jump){
+        for (const op of jump){
             this.op.set(i++, [op, DATA.IMM8]);
 
         }
-        this.op.set(i++, [this.RTRN, DATA.None]);
+        this.op.set(i++, [this.RTRN.bind(this), DATA.None]);
 
     }
+
 
     async run(){
         while (this.stop) {
             await sleep(this._timer);
-            let temp: number = this.program[this.pc.count * INSTRUCTION_BUS]!;
+            let temp: number = this._program[this.pc.count]!;
             let instruct: number = (temp >> 8);
-            let reg1: number = temp & 0xF;
-            let reg2: number = temp & 0xF0;
+            let reg1: number = temp & 0x000F;
+            let reg2: number = (temp & 0x00F0) >> 4;
 
             let temp1 = this.op.get(instruct);
             let data_type:number = temp1[1];
@@ -97,61 +118,73 @@ export class emulator{
                 case DATA.REG_REG:
                     item1 = this.register.getRegItem(reg1);
                     item2 = this.register.getRegItem(reg2);
-                    operand(item1, item2, this.register.setRegItem.bind(reg1));
+                    operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    console.log(`${operand.name}, reg${reg1}:${item1}, reg${reg2}:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.REG_IMM8:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
-                    item2 = this.program[this.pc.count * INSTRUCTION_BUS]!;
-                    operand(item1, item2, this.register.setRegItem.bind(reg1));
+                    item2 = this._program[this.pc.count]!;
+                    operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    console.log(`${operand.name}, reg${reg1}:${item1}, IMM8:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.REG_RAM:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
-                    item2 = this.ram[this.program[this.pc.count * INSTRUCTION_BUS]!]!;
-                    operand(item1, item2, this.register.setRegItem.bind(reg1));
+                    item2 = this.ram[this._program[this.pc.count]!]!;
+                    operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    console.log(`${operand.name}, reg${reg1}:${item1}, RAM${this._program[this.pc.count]!}:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.RAM_REG:
-                    item1 = this.register.getRegItem(reg1);
                     this.pc.next();
-                    index = this.program[this.pc.count * INSTRUCTION_BUS]!;
-                    item2 = this.ram[index]!;
-                    operand(item1, item2, this.save_ram.bind(index));
+                    index = this._program[this.pc.count]!;
+                    item1 = this.ram[index]!;
+                    item2 = this.register.getRegItem(reg1);
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    console.log(`${operand.name}, RAM${index}:${item1}, reg${reg1}:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.RAM_IMM8:
                     this.pc.next();
-                    item1 = this.program[this.pc.count * INSTRUCTION_BUS]!;
+                    index = this._program[this.pc.count]!;
+                    item1 = this.ram[index]!;
                     this.pc.next();
-                    index = this.program[this.pc.count * INSTRUCTION_BUS]!;
-                    item2 = this.ram[index]!;
-                    operand(item1, item2, this.save_ram.bind(index));
+                    item2 = this._program[this.pc.count]!;
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    console.log(`${operand.name}, RAM${index}:${item1}, IMM8:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.RAM_RAM:
                     this.pc.next();
-                    item1 = this.ram[this.program[this.pc.count * INSTRUCTION_BUS]!]!;
+                    index = this._program[this.pc.count]!;
+                    item1 = this.ram[index]!;
                     this.pc.next();
-                    index = this.program[this.pc.count * INSTRUCTION_BUS!]!;
-                    item2 = this.ram[index]!;
-                    operand(item1, item2, this.save_ram.bind(index));
+                    let index2 = this._program[this.pc.count]!;
+                    item2 = this.ram[index2]!;
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    console.log(`${operand.name}, RAM${index}:${item1}, RAM${index2}:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.REG:
                     item1 = this.register.getRegItem(reg1);
                     operand(item1);
+                    console.log(`${operand.name}, reg${reg1}:${item1}`);
                     break;
                 case DATA.IMM8:
                     this.pc.next();
-                    item1 = this.program[this.pc.count * INSTRUCTION_BUS]!;
+                    item1 = this._program[this.pc.count]!;
                     operand(item1);
+                    console.log(`${operand.name}, imm${item1}`);
                     break;
                 case DATA.RAM:
                     this.pc.next();
-                    item1 = this.ram[this.program[this.pc.count * INSTRUCTION_BUS ]!]!;
+                    item1 = this.ram[this._program[this.pc.count]!]!;
                     operand(item1);
+                    console.log(`${operand.name}, RAM${this._program[this.pc.count]!}:${item1}`);
                     break;
                 case DATA.None:
                     operand();
+                    console.log(`${operand.name}, None`);
                     break;
             }
+            this.pc.next();
         }
     }
 
@@ -167,18 +200,22 @@ export class emulator{
     DIV(value1:number, value2:number, set: CallableFunction){
         if (value2 === 0)
             set(0);
-        set(value1 - value2);
+        else
+            set(Math.floor(value1 / value2));
     }
     QUOT(value1:number, value2:number, set: CallableFunction){
         if (value2 === 0)
             set(0);
-        set(value1 % value2);
+        else
+            set(value1 % value2);
     }
     AND(value1:number, value2:number, set: CallableFunction){set(value1 & value2);}
     OR(value1:number, value2:number, set: CallableFunction){set(value1 | value2);}
     XOR(value1:number, value2:number, set: CallableFunction){set(value1 ^ value2);}
     SHL(value1:number, value2:number, set: CallableFunction){set(value1 << value2);}
     SHR(value1:number, value2:number, set: CallableFunction){set(value1 >> value2);}
+    NEG(value1:number, value2:number, set: CallableFunction){set(-value1);}
+    NOT(value1:number, value2:number, set: CallableFunction){set(~value1);}
 
     JEQ(value:number){if (this.status_flags.equal) this.pc.JMP(value);}
     JNE(value:number){if (!this.status_flags.equal) this.pc.JMP(value);}
@@ -188,15 +225,13 @@ export class emulator{
     JGE(value:number){if (this.status_flags.greater || this.status_flags.equal) this.pc.JMP(value);}
     CALL(value:number){
         // @ts-ignore
-        this.ram[this.register.getRegItem(STACK_POINTER)]  = this.pc.JMP;
+        this.ram[this.register.getRegItem(STACK_POINTER)]  = this.pc.count;
         this.pc.JMP(value);
     }
     RTRN(){
         this.pc.JMP(this.ram[this.register.getRegItem(STACK_POINTER)] as number);
     }
 
-    NEG(value: number, set: CallableFunction){set(-value);}
-    NOT(value: number, set: CallableFunction){set(~value);}
     NOP(){}
     HALT(){this.stop = false}
 }
@@ -227,12 +262,12 @@ class Canvas {
         this.g = 0;
         this.b = 0;
     }
-    set VID_X(val: number){ this.x = val & CANVAS_SIZE;}
-    set VID_Y(val: number){ this.y = val & CANVAS_SIZE;}
+    VID_X(val: number){ this.x = val % CANVAS_SIZE;}
+    VID_Y(val: number){ this.y = val % CANVAS_SIZE;}
 
-    set VID_RED(val: number){ this.r = val & COLOR_SIZE * 4;}
-    set VID_GREEN(val: number){ this.g = val & COLOR_SIZE * 4;}
-    set VID_BLUE(val: number){ this.b = val & COLOR_SIZE * 4;}
+    VID_RED(val: number){ this.r = (val % COLOR_SIZE) * 8;}
+    VID_GREEN(val: number){ this.g = (val % COLOR_SIZE) * 8;}
+    VID_BLUE(val: number){ this.b = (val % COLOR_SIZE) * 8;}
 
     fill_back(){
         for (let y = 0; y < CANVAS_SIZE; y++) {
@@ -283,22 +318,26 @@ class StatusFlags{
         this.greater_cell.textContent = '0';
         this.equal_cell.textContent = '0';
         this.less_cell.textContent = '0';
+        this._greater = false;
+        this._equal = false;
+        this._less = false;
     }
     get greater(): boolean {return this._greater;}
     get equal(): boolean {return this._equal;}
     get less(): boolean {return this._less;}
 
     CMP(value1:number, value2:number){
-        let equal = value1 === value2;
+        let equal = value2 === value1;
         this.equal_cell.textContent = equal ? '1':'0';
-        this._equal= equal;
+        this._equal = equal;
 
-        let greater = value1 <= value2;
+        let greater = value2 > value1;
         this.greater_cell.textContent = greater ? '1':'0';
-        this._greater= greater;
+        this._greater = greater;
 
-        this.less_cell.textContent = greater ? '0':'1';
-        this._less= !greater;
+        let less = value2 < value1;
+        this.less_cell.textContent = less ? '1':'0';
+        this._less = less;
     }
 }
 
@@ -314,7 +353,7 @@ class Register {
 
     reset(){
         this.reg.fill(0);
-        for (let i = 0; i <= REG_SIZE; i++){
+        for (let i = 0; i < REG_SIZE; i++){
             if (this.cells[i]) {
                 this.cells[i]!.textContent = String(0);
             }
@@ -345,13 +384,11 @@ class ProgramCounter {
         this.count = 0;
     }
     JMP(value:number): void{
-        this.pc_cell.textContent = String(value);
-        this.count = value;
+        this.pc_cell.textContent = String(value - 1);
+        this.count = value - 1;
     }
     next(): void{
         this.count += 1;
         this.pc_cell.textContent = String(this.count);
     }
 }
-
-

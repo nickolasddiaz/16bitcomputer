@@ -49,7 +49,7 @@ def compile_program_sync():
         # Update UI with results
         document.getElementById('parse-tree').value = result['tree']
         document.getElementById('assembly').value = result['assembly']
-        document.getElementById('binary').value = result['binary']
+        document.getElementById('binary').value = str(result['binary'])
         document.getElementById('program-error').value = result['error']
 
         if result['error'] == '':
