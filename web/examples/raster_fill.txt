@@ -1,9 +1,13 @@
 def main()
 {
-  size = 64;
+  size = 32;
   for(y = 0; y < size; y++){
+    VID_Y(y);
+    VID_BLUE(y);
     for(x = 0; x < size; x++){
-        VIDEO((x+y), (x+y), (x+y), x, y);
+        VID_X(x);
+        VID_GREEN(x);
+        VID();
     }
   }
 }

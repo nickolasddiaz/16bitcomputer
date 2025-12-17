@@ -7,9 +7,9 @@
     "target": "es6",
     "types": [],
 
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
+    "sourceMap": false,
+    "declaration": false,
+    "declarationMap": false,
 
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

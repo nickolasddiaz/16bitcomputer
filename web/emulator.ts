@@ -1,4 +1,4 @@
-const CANVAS_SIZE: number = 64;
+const CANVAS_SIZE: number = 32;
 const COLOR_SIZE: number = 32;
 const REG_SIZE: number = 16;
 const STACK_POINTER: number = 15;
@@ -38,6 +38,7 @@ export class emulator{
     private stop: boolean;
     private op: any;
     private _timer: number;
+    private start_canvas_timer: number;
 
     reset(){
         this.canvas.reset();
@@ -60,8 +61,9 @@ export class emulator{
         this.pc = new ProgramCounter(program_counter_element);
         this.stop = true;
         this.op= new Map<number, [any, number]>();
-        this._timer = 10;
+        this._timer = 4;
         this.program = "";
+        this.start_canvas_timer = performance.now();
 
         let arith_data = [DATA.REG_REG, DATA.RAM_REG, DATA.REG_IMM8, DATA.REG_RAM, DATA.RAM_IMM8, DATA.RAM_RAM];
         let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
@@ -101,6 +103,10 @@ export class emulator{
     async run(){
         while (this.stop) {
             await sleep(this._timer);
+            if (performance.now() - this.start_canvas_timer > 200){
+                this.start_canvas_timer = performance.now();
+                this.canvas.render();
+            }
             let temp: number = this._program[this.pc.count]!;
             let instruct: number = (temp >> 8);
             let reg1: number = temp & 0x000F;
@@ -119,21 +125,18 @@ export class emulator{
                     item1 = this.register.getRegItem(reg1);
                     item2 = this.register.getRegItem(reg2);
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    console.log(`${operand.name}, reg${reg1}:${item1}, reg${reg2}:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.REG_IMM8:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    console.log(`${operand.name}, reg${reg1}:${item1}, IMM8:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.REG_RAM:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this.ram[this._program[this.pc.count]!]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    console.log(`${operand.name}, reg${reg1}:${item1}, RAM${this._program[this.pc.count]!}:${item2} = ${this.register.getRegItem(reg1)}`);
                     break;
                 case DATA.RAM_REG:
                     this.pc.next();
@@ -141,7 +144,6 @@ export class emulator{
                     item1 = this.ram[index]!;
                     item2 = this.register.getRegItem(reg1);
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    console.log(`${operand.name}, RAM${index}:${item1}, reg${reg1}:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.RAM_IMM8:
                     this.pc.next();
@@ -150,7 +152,6 @@ export class emulator{
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    console.log(`${operand.name}, RAM${index}:${item1}, IMM8:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.RAM_RAM:
                     this.pc.next();
@@ -160,28 +161,23 @@ export class emulator{
                     let index2 = this._program[this.pc.count]!;
                     item2 = this.ram[index2]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    console.log(`${operand.name}, RAM${index}:${item1}, RAM${index2}:${item2} = ${this.ram[index]}`);
                     break;
                 case DATA.REG:
                     item1 = this.register.getRegItem(reg1);
                     operand(item1);
-                    console.log(`${operand.name}, reg${reg1}:${item1}`);
                     break;
                 case DATA.IMM8:
                     this.pc.next();
                     item1 = this._program[this.pc.count]!;
                     operand(item1);
-                    console.log(`${operand.name}, imm${item1}`);
                     break;
                 case DATA.RAM:
                     this.pc.next();
                     item1 = this.ram[this._program[this.pc.count]!]!;
                     operand(item1);
-                    console.log(`${operand.name}, RAM${this._program[this.pc.count]!}:${item1}`);
                     break;
                 case DATA.None:
                     operand();
-                    console.log(`${operand.name}, None`);
                     break;
             }
             this.pc.next();
@@ -292,7 +288,8 @@ class Canvas {
         this.data[index + 1] = this.g;      // Green
         this.data[index + 2] = this.b;      // Blue
         this.data[index + 3] = 255;         // Alpha (opacity, 0-255)
-
+    }
+    render() {
         this.ctx.putImageData(this.imageData, 0, 0);
     }
 }
