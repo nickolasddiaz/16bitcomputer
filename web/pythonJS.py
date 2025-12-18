@@ -47,7 +47,8 @@ def compile_program_sync():
         result = compiler.run(program_text)
 
         # Update UI with results
-        document.getElementById('parse-tree').value = result['tree']
+        parse_tree = document.getElementById('parse-tree')
+        parse_tree.insertAdjacentHTML('beforeend', result['tree'])
         document.getElementById('assembly').value = result['assembly']
         document.getElementById('binary').value = str(result['binary'])
         document.getElementById('program-error').value = result['error']

@@ -39,6 +39,7 @@ export class emulator{
     private op: any;
     private _timer: number;
     private start_canvas_timer: number;
+    private instruct_element: HTMLElement;
 
     reset(){
         this.canvas.reset();
@@ -46,24 +47,26 @@ export class emulator{
         this.ram.fill(0);
         this.register.reset();
         this.pc.reset();
-        this.stop = true;
+        this.stop = false;
     }
 
     constructor(canvas: HTMLCanvasElement,
                 greater_element: HTMLElement, equal_element: HTMLElement, less_element: HTMLElement,
                 register_id: HTMLElement[],
-                program_counter_element: HTMLElement) {
+                program_counter_element: HTMLElement,
+                instruct_element: HTMLElement) {
 
         this.ram = new Uint16Array(0xFFFF);
         this.canvas = new Canvas(canvas);
         this.status_flags = new StatusFlags(greater_element, equal_element, less_element);
         this.register = new Register(register_id);
         this.pc = new ProgramCounter(program_counter_element);
-        this.stop = true;
+        this.stop = false;
         this.op= new Map<number, [any, number]>();
-        this._timer = 4;
+        this._timer = 1;
         this.program = "";
         this.start_canvas_timer = performance.now();
+        this.instruct_element = instruct_element;
 
         let arith_data = [DATA.REG_REG, DATA.RAM_REG, DATA.REG_IMM8, DATA.REG_RAM, DATA.RAM_IMM8, DATA.RAM_RAM];
         let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
@@ -99,11 +102,10 @@ export class emulator{
 
     }
 
-
     async run(){
-        while (this.stop) {
+        while (!this.stop) {
             await sleep(this._timer);
-            if (performance.now() - this.start_canvas_timer > 200){
+            if (performance.now() - this.start_canvas_timer > 100){
                 this.start_canvas_timer = performance.now();
                 this.canvas.render();
             }
@@ -116,6 +118,14 @@ export class emulator{
             let data_type:number = temp1[1];
             let operand: CallableFunction = temp1[0];
 
+            let name = operand.name;
+
+            if (name.startsWith('bound ')) {
+                name = name.substring(6);
+            }
+
+            this.instruct_element.textContent = name;
+
             let item1: number;
             let item2: number;
             let index: number;
@@ -125,18 +135,21 @@ export class emulator{
                     item1 = this.register.getRegItem(reg1);
                     item2 = this.register.getRegItem(reg2);
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG_IMM8:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG_RAM:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this.ram[this._program[this.pc.count]!]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_REG:
                     this.pc.next();
@@ -144,6 +157,7 @@ export class emulator{
                     item1 = this.ram[index]!;
                     item2 = this.register.getRegItem(reg1);
                     operand(item2, item1, this.save_ram.bind(this, index));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_IMM8:
                     this.pc.next();
@@ -152,6 +166,7 @@ export class emulator{
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_RAM:
                     this.pc.next();
@@ -161,20 +176,24 @@ export class emulator{
                     let index2 = this._program[this.pc.count]!;
                     item2 = this.ram[index2]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
+                    this.instruct_element.textContent += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG:
                     item1 = this.register.getRegItem(reg1);
                     operand(item1);
+                    this.instruct_element.textContent += ` ${item1}`;
                     break;
                 case DATA.IMM8:
                     this.pc.next();
                     item1 = this._program[this.pc.count]!;
                     operand(item1);
+                    this.instruct_element.textContent += ` ${item1}`;
                     break;
                 case DATA.RAM:
                     this.pc.next();
                     item1 = this.ram[this._program[this.pc.count]!]!;
                     operand(item1);
+                    this.instruct_element.textContent += ` ${item1}`;
                     break;
                 case DATA.None:
                     operand();
@@ -182,6 +201,7 @@ export class emulator{
             }
             this.pc.next();
         }
+        this.canvas.render();
     }
 
     save_ram(index: number, value: number){
@@ -229,7 +249,7 @@ export class emulator{
     }
 
     NOP(){}
-    HALT(){this.stop = false}
+    HALT(){this.stop = true}
 }
 
 class Canvas {

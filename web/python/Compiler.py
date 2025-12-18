@@ -17,11 +17,30 @@ Main classes:
 import time
 from abc import ABC
 
-from lark import Lark
+from lark import Lark, Transformer
 
 from JumpManager import jump_manager
 from Parser import Parser
 from Type import Operand
+
+
+class HtmlDetailsTransformer(Transformer):
+    """
+    Transforms a Lark Tree into an HTML string using <details> and <summary> tags.
+    """
+
+    def __default__(self, data, children, meta):
+        # This method handles all rules not explicitly defined in the Transformer.
+        # 'data' is the name of the rule (e.g., 'start', 'expression').
+        # 'children' is a list of the transformed children (strings in this case).
+
+        summary_content = f"<summary>{data}</summary>"
+        details_content = "".join(children)
+
+        return f"<details open>{summary_content}{details_content}</details>"
+
+    def __default_token__(self, token):
+        return f"<div>{token.value}</div>"
 
 
 class Compiler(ABC):
@@ -68,7 +87,7 @@ class Compiler(ABC):
 
             end_time = time.perf_counter()
 
-            return parse_tree.pretty(), asm_str, binary_str, "", end_time - start_time
+            return HtmlDetailsTransformer().transform(parse_tree), asm_str, binary_str, "", end_time - start_time
 
         except Exception as e:
             return "", "", "", str(e), 0

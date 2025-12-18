@@ -34,7 +34,13 @@
           <option value="gradient">Gradient</option>
         </select>
         <button id="run-program"> Run Program</button>
-        <div id="messageContainer" class="message-container"></div>
+        <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
+        <label id="execute-label">Time per executions: 1 ms</label>
+
+        <div id="messageContainer" class="message-container">
+            <div class="close-button" id="closeMessage">&times;</div>
+            <div class="message-text"></div>
+        </div>
         <div class="tab">
           <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
           <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
@@ -46,7 +52,7 @@
         </div>
         <textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
         <textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
-        <textarea id="parse-tree" class="tab_content" name="parse-tree" readonly="readonly">Compile to see parse tree...</textarea>
+        <div id="parse-tree" class="tab_content"></div>
         <textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
         <textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
         <textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
@@ -77,7 +83,16 @@
                       <h3>Program Counter</h3>
                       <div class="pc-display">
                         <span>PC:</span>
-                        <span id="pc_id" class="pc-value">0x0000</span>
+                        <span id="pc_id" class="pc-value">0</span>
+                      </div>
+                    </div>
+
+                    <!-- Instructions -->
+                    <div class="status-section">
+                      <h3>Instructions</h3>
+                      <div class="pc-display">
+                        <span>Instructions:</span>
+                        <span id="instruct_id" class="pc-value"></span>
                       </div>
                     </div>
                 </div>
@@ -121,7 +136,16 @@
                     document.getElementById("less_id"),
                     registers, // table of 16
                     document.getElementById("pc_id"),
+                    document.getElementById("instruct_id"),
                 );
+
+                const slider = document.getElementById("execute-time");
+                const output = document.getElementById("execute-label");
+
+                slider.oninput = function() {
+                  output.innerHTML = `Time per executions: ${String(2 ** this.value)} ms`;
+                  computer.timer = 2 ** this.value
+                }
 
                 let runButton = document.getElementById("run-program");
                 runButton.onclick = runProgram; // Reference the function
@@ -167,10 +191,23 @@
 
             window.displayMessage = (message, type) => {
                 const messageContainer = document.getElementById('messageContainer');
-                messageContainer.className = 'message-container';
-                messageContainer.textContent = '';
-                messageContainer.classList.add('show', type);
-                messageContainer.textContent = message;
+
+                let textSpan = messageContainer.querySelector('.message-text');
+                if (!textSpan) {
+                    textSpan = document.createElement('span');
+                    textSpan.className = 'message-text';
+                    messageContainer.appendChild(textSpan);
+                }
+
+                textSpan.textContent = message;
+                messageContainer.className = `message-container show ${type}`;
+                messageContainer.style.display = 'block';
+            };
+
+            document.getElementById('closeMessage').onclick = function() {
+                const messageContainer = document.getElementById('messageContainer');
+                messageContainer.classList.remove('show', 'success', 'error');
+                messageContainer.style.display = 'none';
             };
 
             // loading bar
@@ -185,7 +222,6 @@
                     }
                 }, 100);
             });
-
 
         </script>
     </body>
