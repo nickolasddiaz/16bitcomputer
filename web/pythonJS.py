@@ -1,5 +1,5 @@
 from WebInterface import WebInterface
-from js import document, console, displayMessage
+from js import document, console, displayMessage, update_textboxes
 import asyncio
 
 # Global compiler instance
@@ -23,6 +23,7 @@ async def load_files():
         # Enable compile button
         document.getElementById('compile-btn').disabled = False
         document.getElementById('options').disabled = False
+        update_textboxes()
 
     except Exception as e:
         console.error(f"Error loading files: {e}")
@@ -31,6 +32,7 @@ async def load_files():
         document.getElementById('grammar').value = error_message
         document.getElementById('program').value = error_message
         document.getElementById('program-error').value = error_message
+        update_textboxes()
 
 
 def compile_program_sync():
@@ -59,9 +61,12 @@ def compile_program_sync():
         else:
             displayMessage(f"Compilation resulted in errors: {result['error']}", "error")
 
+        update_textboxes()
+
     except Exception as e:
         displayMessage(f"Compilation error: {e}")
         document.getElementById('program-error').value = f"Compilation failed: {str(e)}"
+        update_textboxes()
 
 
 # Export function to JavaScript

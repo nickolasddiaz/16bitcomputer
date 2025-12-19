@@ -77,7 +77,12 @@ export class emulator {
     }
     run() {
         return __awaiter(this, void 0, void 0, function* () {
+            let program_start = performance.now();
             while (!this.stop) {
+                while (performance.now() - (program_start + this._timer) < 4) { //measured in milliseconds
+                    yield sleep(1);
+                }
+                program_start = performance.now();
                 yield sleep(this._timer);
                 if (performance.now() - this.start_canvas_timer > 100) {
                     this.start_canvas_timer = performance.now();
@@ -165,7 +170,6 @@ export class emulator {
                         break;
                     case DATA.None:
                         operand();
-                        this.instruct_element.textContent += " None";
                         break;
                 }
                 this.pc.next();

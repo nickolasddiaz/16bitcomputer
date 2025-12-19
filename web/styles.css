@@ -15,7 +15,6 @@ body {
     margin: 0;
     padding: 20px;
     font-family: 'Courier New', monospace;
-
 }
 
 .tab {
@@ -99,6 +98,7 @@ body {
   border-radius: 5px;
   overflow: hidden;
 }
+
 #loadingProgress {
   height: 100%;
   background-color: var(--green);
@@ -135,13 +135,11 @@ body {
     border-style: solid;
 }
 
-/* Computer/Emulator Styling */
 .flex-container {
   display: grid;
   grid-template-columns: 1fr 1fr; /* Creates two columns of equal width */
-  gap: 20px; /* Adds space between the grid items */
+  gap: 20px;
 }
-
 
 #computer {
     display: None;
@@ -234,14 +232,6 @@ body {
     font-size: 14px;
 }
 
-.registers-table th {
-    background-color: var(--green);
-    color: white;
-    padding: 8px;
-    text-align: left;
-    font-weight: bold;
-}
-
 .registers-table td {
     padding: 6px 8px;
     border: 1px solid var(--grey);
@@ -254,7 +244,6 @@ body {
 .registers-table tr:hover {
     background-color: honeydew;
 }
-
 
 @media (max-width: 1200px) {
     #computer {
@@ -323,7 +312,6 @@ details {
   margin-left: 20px; /* This creates the "tabbed" indent */
   padding-left: 10px;
   border-left: 2px solid lightgray; /* Visual guide for nesting */
-  margin-top: 8px;
   transition: all 0.3s ease;
 }
 
@@ -341,13 +329,10 @@ summary::before {
   display: inline-block;
   width: 20px;
   transition: transform 0.2s;
-  font-size: 1.5vw;
 }
 
-/* Rotate arrow when open */
 details[open] > summary::before {
   content: "↓";
-  font-size: 1.5vw;
 }
 
 details[open] {
@@ -357,5 +342,48 @@ details[open] {
 details div {
   color: mediumslateblue;
   font-weight: bold;
-  padding: 3px 3px 3px 50px;
+}
+
+.LN_wrapper {
+    display: none;
+    flex-direction: row;
+    border: 1px solid gainsboro;
+    min-height: 400px;
+    overflow: hidden;
+    background-color: snow;
+    padding: 6px 12px;
+    border-top: none;
+    box-sizing: border-box;
+}
+
+.LN_sb {
+    background-color: lightgray;
+    border-right: 1px solid gainsboro;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 5px 5px;
+    text-align: right;
+    user-select: none;
+    width: 30px;
+}
+
+.LN_ta {
+    border: none;
+    outline: none;
+    padding: 5px;
+    width: calc(100% - 40px);
+    resize: none;
+    font-family: monospace;
+    font-size: 13px;
+    overflow-y: auto;
+    background: white;
+}
+
+textarea.tab_content {
+    height: 100%;
+    border: none;
+    outline: none;
+    font-family: monospace;
+    padding-left: 5px;
+    margin: 0;
 }

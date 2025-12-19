@@ -5,9 +5,12 @@
         <meta name="viewport" content="width=device-width,initial-scale=1.0">
         <title>Nickolas' Compiler</title>
 
+        <!-- Personal logic for the page-->
+        <script type="module" src="./main.js"></script>
+
         <!-- PyScript CSS and JS -->
-        <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
-        <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+        <link rel="stylesheet" href="https://pyscript.net/releases/2025.11.2/core.css">
+        <script type="module" src="https://pyscript.net/releases/2025.11.2/core.js"></script>
 
         <!-- load personal css -->
         <link rel="stylesheet" href="styles.css">
@@ -26,7 +29,7 @@
             <div id="loadingProgress"></div>
           </div>
         </div>
-        <button id="compile-btn" onclick="compileProgram()">Compile</button>
+        <button id="compile-btn" onclick="compileProgram();">Compile</button>
         <label for="options"></label>
         <select name="options" id="options" onchange="choose_starter_program()">
           <option value="none">None</option>
@@ -100,129 +103,12 @@
                 <!-- Registers Table -->
                 <div class="status-section">
                   <h3>Registers</h3>
-                  <table class="registers-table" id="register_table">
-                    <thead><tr><th>Register</th><th>Value</th></tr></thead>
-                    <tbody id="register_id"></tbody> <!-- Generate 16 registers -->
+                  <table class="registers-table" id="register_table"> <!-- Generate 16 registers -->
+                    <tr id="register-id"><td>Register</td></tr>
+                    <tr id="register-val"><td>Value</td></tr>
                   </table>
                 </div>
             </div>
         </div>
-
-        <script type="module">
-            import { emulator } from './emulator.js';
-
-            let computer;
-
-            document.addEventListener('DOMContentLoaded', () => {
-                // Initialize registers table
-                let tbody = document.getElementById("register_id");
-                let registers = new Array(16);
-                for (let i = 0; i < 16; i++){
-                    const tr = document.createElement('tr');
-                    const name = document.createElement('td');
-                    name.textContent = `R${i}`;
-                    const value = document.createElement('td');
-                    tr.appendChild(name);
-                    tr.appendChild(value);
-                    tbody.appendChild(tr);
-                    value.textContent = "0";
-                    registers[i] = value;
-                }
-
-                computer = new emulator(
-                    document.getElementById("pixelCanvas"),
-                    document.getElementById("greater_id"),
-                    document.getElementById("equal_id"),
-                    document.getElementById("less_id"),
-                    registers, // table of 16
-                    document.getElementById("pc_id"),
-                    document.getElementById("instruct_id"),
-                );
-
-                const slider = document.getElementById("execute-time");
-                const output = document.getElementById("execute-label");
-
-                slider.oninput = function() {
-                  output.innerHTML = `Time per executions: ${String(2 ** this.value)} ms`;
-                  computer.timer = 2 ** this.value
-                }
-
-                let runButton = document.getElementById("run-program");
-                runButton.onclick = runProgram; // Reference the function
-
-                document.getElementById('compile-btn').disabled = false;
-                document.getElementById('options').disabled = false;
-                document.getElementById('run-program').disabled = false;
-            });
-
-            // Function to run the program (now in the module scope)
-            function runProgram(){
-                computer.program = document.getElementById('binary').value;
-                computer.reset();
-                computer.run();
-            }
-
-            window.runProgram = runProgram;
-            window.openTab = (evt, name) => {
-                let i, tabcontent, tablinks;
-                tabcontent = document.getElementsByClassName("tab_content");
-                for (i = 0; i < tabcontent.length; i++) {
-                    tabcontent[i].style.display = "none";
-                }
-                tablinks = document.getElementsByClassName("tablinks");
-                for (i = 0; i < tablinks.length; i++) {
-                    tablinks[i].className = tablinks[i].className.replace(" active", "");
-                }
-                document.getElementById(name).style.display = "block";
-                evt.currentTarget.className += " active";
-            };
-
-            window.choose_starter_program = async () => {
-                const selectedValue = document.getElementById("options").value;
-                if (selectedValue === "none") {
-                    document.getElementById('program').value = "// Enter your program here"
-                    return;
-                }
-                await fetch("./examples/" + selectedValue + ".txt")
-                    .then(async response =>
-                        document.getElementById('program').value = await response.text())
-                    .catch(error => displayMessage('Error fetching file:'+ error, "error"));
-            };
-
-            window.displayMessage = (message, type) => {
-                const messageContainer = document.getElementById('messageContainer');
-
-                let textSpan = messageContainer.querySelector('.message-text');
-                if (!textSpan) {
-                    textSpan = document.createElement('span');
-                    textSpan.className = 'message-text';
-                    messageContainer.appendChild(textSpan);
-                }
-
-                textSpan.textContent = message;
-                messageContainer.className = `message-container show ${type}`;
-                messageContainer.style.display = 'block';
-            };
-
-            document.getElementById('closeMessage').onclick = function() {
-                const messageContainer = document.getElementById('messageContainer');
-                messageContainer.classList.remove('show', 'success', 'error');
-                messageContainer.style.display = 'none';
-            };
-
-            // loading bar
-            window.addEventListener('load', function() {
-                let progress = 0;
-                const interval = setInterval(function () {
-                    progress += 10;
-                    document.getElementById('loadingProgress').style.width = progress + '%';
-                    if (progress >= 100) {
-                        clearInterval(interval);
-                        document.getElementById('loadingOverlay').style.display = 'none';
-                    }
-                }, 100);
-            });
-
-        </script>
     </body>
 </html>

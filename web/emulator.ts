@@ -103,7 +103,12 @@ export class emulator{
     }
 
     async run(){
+        let program_start: number = performance.now();
         while (!this.stop) {
+            while (performance.now() - (program_start + this._timer) < 4){ //measured in milliseconds
+                await sleep(1);
+            }
+            program_start = performance.now();
             await sleep(this._timer);
             if (performance.now() - this.start_canvas_timer > 100){
                 this.start_canvas_timer = performance.now();
