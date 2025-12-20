@@ -47,7 +47,7 @@ class Compiler(ABC):
     def __init__(self, grammar: str):
         self.grammar: str = grammar
 
-    def _main(self, program: str) -> tuple[str, str, str, str, float]:
+    def _main(self, program: str) -> tuple[str, str, str, str, float, list[int]]:
         try:
             start_time = time.perf_counter()
 
@@ -81,13 +81,18 @@ class Compiler(ABC):
 
             # gets the binary string and writes it to program.hex
             binary_str = ""
+            binary_to_assembly_mappings: list[int] = []
+            total = 0
             for cmd in transformed:
                 cmd.compute_op()
-                binary_str += cmd.get_binary()
+                temp = cmd.get_binary()
+                total += len(temp)//4
+                binary_to_assembly_mappings.append(total)
+                binary_str += temp
 
             end_time = time.perf_counter()
 
-            return HtmlDetailsTransformer().transform(parse_tree), asm_str, binary_str, "", end_time - start_time
+            return HtmlDetailsTransformer().transform(parse_tree), asm_str, binary_str, "", end_time - start_time, binary_to_assembly_mappings
 
         except Exception as e:
-            return "", "", "", str(e), 0
+            return "", "", "", str(e), 0, []

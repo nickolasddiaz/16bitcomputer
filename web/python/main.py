@@ -9,7 +9,7 @@ class LocalInterface(Compiler):
 
     def run(self):
         program: str = self.get_program()
-        tree, assembly, binary, error, execution_time  = self._main(program)
+        tree, assembly, binary, error, execution_time, binary_to_assembly_mappings  = self._main(program)
 
         if tree:
             self.write_parse_tree(tree)
