@@ -1,0 +1,29 @@
+def main()
+{
+  VID_RED(31);
+  VID_GREEN(31);
+  VID_BLUE(31);
+  H(0,0);
+}
+
+
+def H(x,y){
+    VID_X(x+1);
+    liney_5(y);
+
+    VID_X(x+3);
+    liney_5(y);
+
+    VID_X(x+2);
+    VID_Y(y+3);
+    VID();
+    return;
+}
+
+def liney_5(y){
+    for(stop = y + 5; y < stop; y++){
+        VID_Y(y);
+        VID();
+    }
+    return;
+}

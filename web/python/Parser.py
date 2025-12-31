@@ -497,16 +497,19 @@ class Parser(Transformer):
         variable_process.set_arguments(function_arguments)
 
         # logic for reserving functions
-        if function_name in ["VID", "VID_V", "VID_X", "VID_Y", "VIDEO", "HALT"]:
+        if function_name in ["VID", "VID_RED", "VID_GREEN", "VID_BLUE", "VID_X", "VID_Y", "HALT"]:
             raise ValueError(f"{function_name} is a reserved function")
 
         # sets the label for the function
         function_label = jump_manager.get_function(function_name)
         # starts off every block with setting up the base and stack pointer
         final_block = [CommandLabel(function_label),
-                       Command(Operand.MOV, RamVar(0), base_pointer()),  # push the base_pointer
+                       Command(Operand.PUSH, base_pointer()),  # push the base_pointer
                        Command(Operand.MOV, base_pointer(), stack_pointer()),  # starting function's frame
                        ]
+
+        if len(function_arguments) != 0:
+            final_block.append(Command(Operand.ADD, stack_pointer(), len(function_arguments)))
 
         # processing the data to ensure it is correct removing the tuples
         for i, arg in enumerate(main_block):
@@ -531,9 +534,9 @@ class Parser(Transformer):
             else:
                 final_block.extend(variable_process.allocate_command(item, i, function_name))
 
-        # after the main function is called halt and if continued run again
+        # after the main function is called halt
         if function_name == "main":
-            final_block.extend([Command(Operand.HALT), CommandJump(function_label)])
+            final_block.append(Command(Operand.HALT))
 
 
         return final_block

@@ -23,90 +23,104 @@
 
     </head>
     <body>
+    <div class="sticky-nav">
         <h1>Nickolas' Compiler</h1>
-        <div id="loadingOverlay">
-          <div id="loadingBar">
-            <div id="loadingProgress"></div>
-          </div>
-        </div>
-        <button id="compile-btn" onclick="compileProgram();">Compile</button>
-        <label for="options"></label>
-        <select name="options" id="options" onchange="choose_starter_program()">
-          <option value="none">None</option>
-          <option value="raster_fill">Raster Fill</option>
-          <option value="gradient">Gradient</option>
-        </select>
-        <button id="run-program"> Run Program</button>
-        <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
-        <label id="execute-label">Time per executions: 1 ms</label>
+            <div id="loadingOverlay">
+              <div id="loadingBar">
+                <div id="loadingProgress"></div>
+              </div>
+            </div>
+            <button id="compile-btn" onclick="compileProgram();">Compile</button>
+            <label for="options"></label>
+            <select name="options" id="options" onchange="choose_starter_program()">
+              <option value="none">None</option>
+              <option value="raster_fill">Raster Fill</option>
+              <option value="gradient">Gradient</option>
+              <option value="hello_world">Hello World</option>
+            </select>
+            <button id="run-program"> Run Program</button>
+            <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
+            <label id="execute-label">Time per executions: 1 ms</label>
 
-        <div id="messageContainer" class="message-container">
-            <div class="close-button" id="closeMessage">&times;</div>
-            <div class="message-text"></div>
-        </div>
+            <div id="messageContainer" class="message-container">
+                <div class="close-button" id="closeMessage">&times;</div>
+                <div class="message-text"></div>
+            </div>
+
+
         <div class="tab">
-          <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
-          <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
-          <button class="tablinks" onclick="openTab(event, 'parse-tree')">Parse Tree</button>
-          <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
-          <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
-          <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
-          <button class="tablinks" onclick="openTab(event, 'computer')">Output</button>
+            <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
+            <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
+            <button class="tablinks" onclick="openTab(event, 'parse-tree')">Parse Tree</button>
+            <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
+            <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
+            <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
+
+            <button class="tablinks output-tab" onclick="handleSidebar(event, 'computer')">☰ Output</button>
         </div>
-        <textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
-        <textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
-        <div id="parse-tree" class="tab_content"></div>
-        <textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
-        <textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
-        <textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
-        <div id="computer" class="flex-container tab_content">
-            <!-- Comparison Flags -->
-            <div class="flex-container">
-                <div>
-                    <canvas id="pixelCanvas" width="32" height="32"></canvas>
-                    <div class="status-section">
-                      <h3>Comparison Flags</h3>
-                      <div class="flags-container">
-                        <div class="flag">
-                          <span class="flag-label">GREATER</span>
-                          <span id="greater_id" class="flag-value inactive">0</span>
-                        </div>
-                        <div class="flag">
-                          <span class="flag-label">EQUAL</span>
-                          <span id="equal_id" class="flag-value inactive">0</span>
-                        </div>
-                        <div class="flag">
-                          <span class="flag-label">LESS</span>
-                          <span id="less_id" class="flag-value inactive">0</span>
-                        </div>
-                      </div>
-                    </div>
-                    <!-- Program Counter -->
-                    <div class="status-section">
-                      <h3>Program Counter</h3>
-                      <div class="pc-display">
-                        <span>PC:</span>
-                        <span id="pc_id" class="pc-value">0</span>
-                      </div>
-                    </div>
+        </div>
 
-                    <!-- Instructions -->
-                    <div class="status-section">
-                      <h3>Instructions</h3>
-                      <div class="pc-display">
-                        <span>Instructions:</span>
-                        <span id="instruct_id" class="pc-value"></span>
-                      </div>
-                    </div>
-                </div>
+        <div class="main-content-layout">
+            <div id="central-editor-area">
+                <textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
+                <textarea id="grammar" class="tab_content" name="grammar" readonly="readonly">Loading...</textarea>
+                <div id="parse-tree" class="tab_content"></div>
+                <textarea id="assembly" class="tab_content" name="assembly" readonly="readonly">Compile to see assembly...</textarea>
+                <textarea id="binary" class="tab_content" name="binary" readonly="readonly">Compile to see binary...</textarea>
+                <textarea id="program-error" class="tab_content" name="program-error" readonly="readonly">Errors will appear here...</textarea>
+            </div>
+            <div id="computer" class="output-computer-panel tab_content">
+                <!-- The inner content of the computer panel -->
+                <div class="computer-display-area" style="text-align: center;">
 
-                <!-- Registers Table -->
-                <div class="status-section">
-                  <h3>Registers</h3>
-                  <table class="registers-table" id="register_table"> <!-- Generate 16 registers -->
-                    <tr id="register-id"><td>Register</td></tr>
-                    <tr id="register-val"><td>Value</td></tr>
-                  </table>
+                    <div style="text-align: center;">
+                        <canvas id="pixelCanvas" width="32" height="32"></canvas>
+                        <div class="status-section">
+                          <h3>Comparison Flags</h3>
+                          <div class="flags-container">
+                            <div class="flag">
+                              <span class="flag-label">GREATER</span>
+                              <span id="greater_id" class="flag-value inactive">0</span>
+                            </div>
+                            <div class="flag">
+                              <span class="flag-label">EQUAL</span>
+                              <span id="equal_id" class="flag-value inactive">0</span>
+                            </div>
+                            <div class="flag">
+                              <span class="flag-label">LESS</span>
+                              <span id="less_id" class="flag-value inactive">0</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="status-sections-row">
+                            <!-- Program Counter -->
+                            <div class="status-section">
+                              <h3>Program Counter</h3>
+                              <div class="pc-display">
+                                <span>PC:</span>
+                                <span id="pc_id" class="pc-value">0</span>
+                              </div>
+                            </div>
+
+                            <!-- Instructions -->
+                            <div class="status-section">
+                              <h3>Instructions</h3>
+                              <div class="pc-display">
+                                <span>Instructions:</span>
+                                <span id="instruct_id" class="pc-value"></span>
+                              </div>
+                            </div>
+                        </div>
+
+                        <!-- Registers Table -->
+                        <div class="status-section">
+                          <h3>Registers</h3>
+                          <table class="registers-table" id="register_table"> <!-- Generate 16 registers -->
+                            <tr id="register-id"><td>Register</td></tr>
+                            <tr id="register-val"><td>Value</td></tr>
+                          </table>
+                        </div>
+                   </div>
                 </div>
             </div>
         </div>

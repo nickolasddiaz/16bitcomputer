@@ -31,7 +31,7 @@ class LocalInterface(Compiler):
         return grammar_file.read_text()
 
     def get_program(self) -> str:
-        grammar_file = Path('../examples/raster_fill.txt')
+        grammar_file = Path('../examples/hello_world.txt')
         return grammar_file.read_text()
 
     def write_parse_tree(self, parse_tree:str) -> None:

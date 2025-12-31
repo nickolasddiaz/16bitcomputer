@@ -30,10 +30,10 @@ export class emulator{
         this._timer = value;
     }
     private readonly ram: Uint16Array<ArrayBuffer>;
-    private canvas: Canvas;
-    private status_flags: StatusFlags;
-    private register: Register;
-    private pc: ProgramCounter;
+    private readonly canvas: Canvas;
+    private readonly status_flags: StatusFlags;
+    private readonly register: Register;
+    private readonly pc: ProgramCounter;
     private _program!: Uint16Array<ArrayBuffer>;
     private stop: boolean;
     private op: any;
@@ -72,7 +72,7 @@ export class emulator{
         let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
 
         let one_data = [DATA.IMM8, DATA.REG, DATA.RAM];
-        let one = [this.canvas.VID_RED.bind(this.canvas), this.canvas.VID_GREEN.bind(this.canvas), this.canvas.VID_BLUE.bind(this.canvas), this.canvas.VID_X.bind(this.canvas), this.canvas.VID_Y.bind(this.canvas)];
+        let one = [this.PUSH.bind(this), this.POP.bind(this) ,this.canvas.VID_RED.bind(this.canvas), this.canvas.VID_GREEN.bind(this.canvas), this.canvas.VID_BLUE.bind(this.canvas), this.canvas.VID_X.bind(this.canvas), this.canvas.VID_Y.bind(this.canvas)];
 
         let jump = [ this.pc.JMP.bind(this.pc), this.JEQ.bind(this), this.JNE.bind(this), this.JG.bind(this), this.JLE.bind(this), this.JL.bind(this), this.JGE.bind(this), this.CALL.bind(this) ];
 
@@ -116,8 +116,8 @@ export class emulator{
             }
             let temp: number = this._program[this.pc.count]!;
             let instruct: number = (temp >> 8);
-            let reg1: number = temp & 0x000F;
-            let reg2: number = (temp & 0x00F0) >> 4;
+            let reg2: number = temp & 0x000F;
+            let reg1: number = (temp & 0x00F0) >> 4;
 
             let temp1 = this.op.get(instruct);
             let data_type:number = temp1[1];
@@ -129,7 +129,7 @@ export class emulator{
                 name = name.substring(6);
             }
 
-            this.instruct_element.textContent = name;
+            let instruct_name: string = name;
 
             let item1: number;
             let item2: number;
@@ -140,21 +140,21 @@ export class emulator{
                     item1 = this.register.getRegItem(reg1);
                     item2 = this.register.getRegItem(reg2);
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG_IMM8:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG_RAM:
                     item1 = this.register.getRegItem(reg1);
                     this.pc.next();
                     item2 = this.ram[this._program[this.pc.count]!]!;
                     operand(item2, item1, this.register.setRegItem.bind(this.register,reg1));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_REG:
                     this.pc.next();
@@ -162,7 +162,7 @@ export class emulator{
                     item1 = this.ram[index]!;
                     item2 = this.register.getRegItem(reg1);
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_IMM8:
                     this.pc.next();
@@ -171,7 +171,7 @@ export class emulator{
                     this.pc.next();
                     item2 = this._program[this.pc.count]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.RAM_RAM:
                     this.pc.next();
@@ -181,29 +181,30 @@ export class emulator{
                     let index2 = this._program[this.pc.count]!;
                     item2 = this.ram[index2]!;
                     operand(item2, item1, this.save_ram.bind(this, index));
-                    this.instruct_element.textContent += ` ${item2} ${item1}`;
+                    instruct_name += ` ${item2} ${item1}`;
                     break;
                 case DATA.REG:
                     item1 = this.register.getRegItem(reg1);
                     operand(item1);
-                    this.instruct_element.textContent += ` ${item1}`;
+                    instruct_name += ` ${item1}`;
                     break;
                 case DATA.IMM8:
                     this.pc.next();
                     item1 = this._program[this.pc.count]!;
                     operand(item1);
-                    this.instruct_element.textContent += ` ${item1}`;
+                    instruct_name += ` ${item1}`;
                     break;
                 case DATA.RAM:
                     this.pc.next();
                     item1 = this.ram[this._program[this.pc.count]!]!;
                     operand(item1);
-                    this.instruct_element.textContent += ` ${item1}`;
+                    instruct_name += ` ${item1}`;
                     break;
                 case DATA.None:
                     operand();
                     break;
             }
+            this.instruct_element.textContent = instruct_name
             this.pc.next();
         }
         this.canvas.render();
@@ -245,16 +246,26 @@ export class emulator{
     JL(value:number){if (this.status_flags.less) this.pc.JMP(value);}
     JGE(value:number){if (this.status_flags.greater || this.status_flags.equal) this.pc.JMP(value);}
     CALL(value:number){
-        // @ts-ignore
-        this.ram[this.register.getRegItem(STACK_POINTER)]  = this.pc.count;
+    let sp = this.register.getRegItem(STACK_POINTER);
+        this.ram[sp + 1] = this.pc.count;
         this.pc.JMP(value);
     }
+
     RTRN(){
-        this.pc.JMP(this.ram[this.register.getRegItem(STACK_POINTER)] as number);
+        let sp = this.register.getRegItem(STACK_POINTER);
+        this.pc.JMP(this.ram[sp + 1] as number);
     }
 
     NOP(){}
     HALT(){this.stop = true}
+    PUSH(value: number){
+        this.save_ram(this.register.getRegItem(STACK_POINTER), value);
+        this.register.add_stack_pt();
+    }
+    POP(value: number){
+        this.register.sub_stack_pt();
+        this.save_ram(this.register.getRegItem(STACK_POINTER), value);
+    }
 }
 
 class Canvas {
@@ -389,7 +400,14 @@ class Register {
     getRegItem(index:number): number{
         return this.reg[index]!;
     }
-
+    sub_stack_pt(){
+        // @ts-ignore
+        this.setRegItem(STACK_POINTER, this.reg[STACK_POINTER] - 1);
+    }
+    add_stack_pt(){
+        // @ts-ignore
+        this.setRegItem(STACK_POINTER, this.reg[STACK_POINTER] + 1);
+    }
 }
 
 class ProgramCounter {

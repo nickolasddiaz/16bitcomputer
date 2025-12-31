@@ -13,6 +13,12 @@ class Operand(Enum):
     NOP = auto()
     HALT = auto()
     VID = auto()
+    PUSH = auto()
+    PUSH_R = auto()
+    PUSH_RR = auto()
+    POP = auto()
+    POP_R = auto()
+    POP_RR = auto()
     VID_RED = auto() #imm8
     VID_RED_R = auto() # register
     VID_RED_RR = auto() # ram
@@ -148,7 +154,7 @@ class Operand(Enum):
         MOV_L = auto()  # move register, ram
         MOV_RI = auto()  # move ram, immediate
         """
-        if Operand.VID.value <= self.value <= Operand.VIDY_RR.value:
+        if Operand.PUSH.value <= self.value <= Operand.VIDY_RR.value:
             match source:
                 case int():
                     return self

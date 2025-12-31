@@ -8,7 +8,7 @@ function setupLineNumbers(taId) {
     if (!ta.parentElement.classList.contains("LN_wrapper")) {
         const wrapper = document.createElement("div");
         wrapper.id = taId + "_wrapper";
-        wrapper.className = "LN_wrapper tab_content";
+        wrapper.className = "LN_wrapper tab_content"; // LN_wrapper also gets tab_content class
         parent.insertBefore(wrapper, ta);
 
         const sidebar = document.createElement("div");
@@ -18,15 +18,15 @@ function setupLineNumbers(taId) {
         wrapper.appendChild(ta);
 
         ta.classList.add("LN_ta");
-        ta.classList.remove("tab_content");
-
+        ta.classList.remove("tab_content"); // Remove tab_content from textarea itself
+                                            // The wrapper now acts as the tab_content
         ta.addEventListener("scroll", () => {
             sidebar.scrollTop = ta.scrollTop;
         });
 
         ta.addEventListener("input", () => updateLineNumbers(ta, sidebar));
 
-        updateLineNumbers(ta, sidebar);
+        updateLineNumbers(ta, sidebar); // Initial update
     }
 }
 
@@ -89,38 +89,46 @@ window.runProgram = () => {
 };
 
 window.openTab = (evt, name) => {
-    let i, tabcontent, tablinks;
+    // Remove active class from all tablinks
+    document.querySelectorAll(".tablinks").forEach(tablink => {
+        tablink.classList.remove("active");
+    });
+    evt.currentTarget.classList.add("active");
 
-    // Hide all tab content
-    tabcontent = document.getElementsByClassName("tab_content");
-    for (i = 0; i < tabcontent.length; i++) {
-        tabcontent[i].style.display = "none";
-    }
+    // Hide all tab_content elements and LN_wrapper elements, except the computer panel
+    document.querySelectorAll('.tab_content, .LN_wrapper').forEach(panel => {
+        // Only hide those that are not 'computer'
+        if (panel.id !== 'computer') {
+            panel.style.display = 'none';
+        }
+    });
 
-    // Also hide all LN_wrapper elements
-    const wrappers = document.getElementsByClassName("LN_wrapper");
-    for (i = 0; i < wrappers.length; i++) {
-        wrappers[i].style.display = "none";
-    }
-
-    // Remove active class from all tabs
-    tablinks = document.getElementsByClassName("tablinks");
-    for (i = 0; i < tablinks.length; i++) {
-        tablinks[i].className = tablinks[i].className.replace(" active", "");
-    }
-
-    // Show the selected tab
+    // Show the specific selected tab content or its wrapper
     const wrapper = document.getElementById(name + "_wrapper");
     const target = document.getElementById(name);
 
-    if (wrapper) {
+    if (wrapper) { // For textareas wrapped by LN_wrapper
         wrapper.style.display = "flex";
-    } else if (target) {
+    } else if (target) { // For other div tab_content elements (like parse-tree)
         target.style.display = "block";
     }
-
-    evt.currentTarget.className += " active";
 };
+
+window.handleSidebar = (evt, name) => {
+    const mainLayoutContainer = document.querySelector('.main-content-layout'); // Target the main layout
+    const computerPanel = document.getElementById(name); // This is #computer
+
+    if (computerPanel.style.display === "none") { // Sidebar is currently hidden, OPEN it
+        computerPanel.style.display = "grid"; // Show it as a grid (its internal layout)
+        mainLayoutContainer.classList.remove('sidebar-hidden'); // Restore two-column layout
+        evt.currentTarget.classList.add("active");
+    } else { // Sidebar is currently visible,  CLOSE it
+        computerPanel.style.display = "none"; // Hide it
+        mainLayoutContainer.classList.add('sidebar-hidden'); // Make left content fill full width
+        evt.currentTarget.classList.remove("active");
+    }
+};
+
 
 window.choose_starter_program = async () => {
     const selectedValue = document.getElementById("options").value;
@@ -168,11 +176,10 @@ window.addEventListener('load', function() {
         }
     }, 100);
 
-    // Append Line Numbers
     ["program", "grammar", "assembly", "binary", "program-error"].forEach((id) => {
         setupLineNumbers(id);
     });
-    openTab(document.getElementById('program'), 'program');
+    document.querySelector('.tablinks.active').click();
 });
 
 window.update_textboxes = () =>{

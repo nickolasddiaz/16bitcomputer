@@ -184,7 +184,7 @@ class MemoryManager:
 
             # clean up before returning
             final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
-                                  Command(Operand.MOV, base_pointer(), RamVar(0)),  # pop the base_pointer
+                                  Command(Operand.POP, base_pointer()),  # pop the base_pointer
                                   Command(Operand.RTRN)
                                   ])
             return final_command
@@ -194,9 +194,6 @@ class MemoryManager:
             # destination is returns and source is arguments, .call_label is the name of the function
             self.shared_rtn.validate_return(cmd.call_label, len(cmd.destination))
             self.shared_rtn.validate_arg(cmd.call_label, len(cmd.source))
-
-            sp: int = self.get_stack_pointer()
-            arg_offset: int = len(cmd.destination) + sp + self.stack_offset
 
             if cmd.call_label in ["VID"]:
                 return [Command(Operand[cmd.call_label])]
@@ -219,19 +216,21 @@ class MemoryManager:
             # compute the arguments
             for index, arg in enumerate(cmd.source):
                 variable, var_lists = self.complex_commands_helper(arg, instruction, function_name)
-                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(arg_offset + index), variable)])
+                final_command.extend(var_lists + [Command(Operand.PUSH, variable)])
 
             # compute the returns if it does exist move it else let it be
             for index, arg in enumerate(cmd.destination):
                 var_location = self._get_var(arg)
-                return_offset = sp + index + 1
+                return_offset =  index + 1
                 if var_location is None:
                     self._ram[arg] = return_offset  # let it exist without moving it
                 else:  # move it because it existed
                     final_command.append(Command(Operand.MOV, RamVar(var_location), RamVar(return_offset)))
 
-            return final_command + [Command(Operand.ADD, stack_pointer(), sp),
-                                    Command(Operand.CALL, None, None, jump_manager.get_function(cmd.call_label))]
+            return final_command + [
+                Command(Operand.CALL, None, None, jump_manager.get_function(cmd.call_label)),
+                Command(Operand.ADD, stack_pointer(), len(cmd.source))
+            ]
 
         # logic assigning ram locations for var _names, handling cases of allocating new variables and the jump_label of old variables
         cmd.destination = self.allocate_helper(cmd.destination, cmd.operand)
