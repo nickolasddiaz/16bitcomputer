@@ -8,6 +8,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import { emulator } from "./emulator.js";
+window.go = false;
+window.restart = true;
+window.compile_btn = document.getElementById('compile-btn');
+window.options_btn = document.getElementById('options');
+window.run_btn = document.getElementById('run-program');
+window.pause_btn = document.getElementById('pause-program');
 let computer;
 function setupLineNumbers(taId) {
     const ta = document.getElementById(taId);
@@ -64,16 +70,51 @@ document.addEventListener('DOMContentLoaded', () => {
         output.innerHTML = `Time per executions: ${String(Math.pow(2, Number(slider.value)))} ms`;
         computer.timer = Math.pow(2, Number(slider.value));
     };
-    let runButton = document.getElementById("run-program");
-    runButton.onclick = window.runProgram;
-    document.getElementById('compile-btn').disabled = false;
-    document.getElementById('options').disabled = false;
-    document.getElementById('run-program').disabled = true;
+    window.run_btn.onclick = window.runProgram;
+    window.pause_btn.onclick = window.pauseProgram;
+    window.compile_btn.disabled = false;
+    window.options_btn.disabled = false;
+    window.run_btn.disabled = true;
 });
+window.pauseProgram = () => {
+    window.go = !window.go;
+    if (window.go) {
+        set_play();
+        computer.run();
+    }
+    else {
+        set_pause();
+    }
+};
+function set_play() {
+    window.pause_btn.textContent = "⏸";
+}
+function set_pause() {
+    window.pause_btn.textContent = "▶";
+}
 window.runProgram = () => {
-    computer.program = document.getElementById('binary').value;
-    computer.reset();
-    computer.run();
+    if (window.restart) {
+        computer.program = document.getElementById('binary').value;
+        computer.reset();
+        window.go = true;
+        set_play();
+        computer.run();
+        window.run_btn.textContent = "Restart Program";
+        window.compile_btn.disabled = true;
+        window.options_btn.disabled = true;
+        window.run_btn.disabled = false;
+        window.pause_btn.disabled = false;
+        window.restart = false;
+    }
+    else {
+        window.run_btn.textContent = "Run Program";
+        window.compile_btn.disabled = false;
+        window.options_btn.disabled = false;
+        window.pause_btn.disabled = true;
+        window.restart = true;
+        window.go = false;
+        set_pause();
+    }
 };
 window.openTab = (evt, name) => {
     // Remove active class from all tablinks

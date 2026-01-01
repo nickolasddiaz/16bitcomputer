@@ -195,7 +195,7 @@ class MemoryManager:
             self.shared_rtn.validate_return(cmd.call_label, len(cmd.destination))
             self.shared_rtn.validate_arg(cmd.call_label, len(cmd.source))
 
-            if cmd.call_label in ["VID"]:
+            if cmd.call_label in ["VID", "HALT"]:
                 return [Command(Operand[cmd.call_label])]
             elif cmd.call_label in ["VID_RED","VID_GREEN","VID_BLUE", "VID_X", "VID_Y"]:
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)

@@ -31,25 +31,12 @@ export class emulator {
     set timer(value) {
         this._timer = value;
     }
-    stop() {
-        this.compile_btn.disabled = true;
-        this.options_btn.disabled = true;
-        this.run_btn.disabled = false;
-        this.go = false;
-    }
-    toggle_go() {
-        this.compile_btn.disabled = true;
-        this.options_btn.disabled = true;
-        this.run_btn.disabled = false;
-        this.go = true;
-    }
     reset() {
         this.canvas.reset();
         this.status_flags.reset();
         this.ram.fill(0);
         this.register.reset();
         this.pc.reset();
-        this.toggle_go();
     }
     constructor(canvas, greater_element, equal_element, less_element, register_id, program_counter_element, instruct_element) {
         this.ram = new Uint16Array(0xFFFF);
@@ -57,15 +44,11 @@ export class emulator {
         this.status_flags = new StatusFlags(greater_element, equal_element, less_element);
         this.register = new Register(register_id);
         this.pc = new ProgramCounter(program_counter_element);
-        this.go = false;
         this.op = new Map();
         this._timer = 1;
         this.program = "";
         this.start_canvas_timer = performance.now();
         this.instruct_element = instruct_element;
-        this.compile_btn = document.getElementById('compile-btn');
-        this.options_btn = document.getElementById('options');
-        this.run_btn = document.getElementById('run-program');
         let arith_data = [DATA.REG_REG, DATA.RAM_REG, DATA.REG_IMM8, DATA.REG_RAM, DATA.RAM_IMM8, DATA.RAM_RAM];
         let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
         let one_data = [DATA.IMM8, DATA.REG, DATA.RAM];
@@ -93,7 +76,8 @@ export class emulator {
     run() {
         return __awaiter(this, void 0, void 0, function* () {
             let program_start = performance.now();
-            while (this.go) {
+            // @ts-ignore
+            while (window.go) {
                 while (performance.now() - (program_start + this._timer) < 4) { //measured in milliseconds
                     yield sleep(1);
                 }
@@ -241,7 +225,9 @@ export class emulator {
         this.pc.JMP(this.ram[sp + 1]);
     }
     NOP() { }
-    HALT() { this.go = true; }
+    HALT() {
+        window.runProgram();
+    }
     PUSH(value) {
         this.save_ram(this.register.getRegItem(STACK_POINTER), value);
         this.register.add_stack_pt();

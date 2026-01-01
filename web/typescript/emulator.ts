@@ -35,27 +35,10 @@ export class emulator{
     private readonly register: Register;
     private readonly pc: ProgramCounter;
     private _program!: Uint16Array<ArrayBuffer>;
-    private go: boolean;
     private op: any;
     private _timer: number;
     private start_canvas_timer: number;
     private instruct_element: HTMLElement;
-    private compile_btn: HTMLButtonElement;
-    private options_btn: HTMLButtonElement;
-    private run_btn: HTMLButtonElement;
-
-    stop(){
-        this.compile_btn.disabled = true;
-        this.options_btn.disabled = true;
-        this.run_btn.disabled = false;
-        this.go = false;
-    }
-    toggle_go(){
-        this.compile_btn.disabled = true;
-        this.options_btn.disabled = true;
-        this.run_btn.disabled = false;
-        this.go = true;
-    }
 
     reset(){
         this.canvas.reset();
@@ -63,7 +46,6 @@ export class emulator{
         this.ram.fill(0);
         this.register.reset();
         this.pc.reset();
-        this.toggle_go()
     }
 
     constructor(canvas: HTMLCanvasElement,
@@ -77,16 +59,11 @@ export class emulator{
         this.status_flags = new StatusFlags(greater_element, equal_element, less_element);
         this.register = new Register(register_id);
         this.pc = new ProgramCounter(program_counter_element);
-        this.go = false;
         this.op= new Map<number, [any, number]>();
         this._timer = 1;
         this.program = "";
         this.start_canvas_timer = performance.now();
         this.instruct_element = instruct_element;
-
-        this.compile_btn = <HTMLButtonElement>document.getElementById('compile-btn');
-        this.options_btn = <HTMLButtonElement>document.getElementById('options');
-        this.run_btn = <HTMLButtonElement>document.getElementById('run-program');
 
         let arith_data = [DATA.REG_REG, DATA.RAM_REG, DATA.REG_IMM8, DATA.REG_RAM, DATA.RAM_IMM8, DATA.RAM_RAM];
         let arith = [this.MOV.bind(this), this.status_flags.CMP.bind(this.status_flags), this.ADD.bind(this), this.SUB.bind(this), this.MULT.bind(this), this.DIV.bind(this), this.QUOT.bind(this), this.AND.bind(this), this.OR.bind(this), this.XOR.bind(this), this.SHL.bind(this), this.SHR.bind(this), this.NEG.bind(this), this.NOT.bind(this)];
@@ -124,7 +101,8 @@ export class emulator{
 
     async run(){
         let program_start: number = performance.now();
-        while (this.go) {
+        // @ts-ignore
+        while (window.go) {
             while (performance.now() - (program_start + this._timer) < 4){ //measured in milliseconds
                 await sleep(1);
             }
@@ -277,7 +255,8 @@ export class emulator{
     }
 
     NOP(){}
-    HALT(){this.go = true}
+    HALT(){ // @ts-ignore
+        window.runProgram()}
     PUSH(value: number){
         this.save_ram(this.register.getRegItem(STACK_POINTER), value);
         this.register.add_stack_pt();

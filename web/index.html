@@ -30,15 +30,16 @@
                 <div id="loadingProgress"></div>
               </div>
             </div>
-            <button id="compile-btn" onclick="compileProgram();">Compile</button>
+            <button class="main_btn" id="compile-btn" onclick="compileProgram();">Compile</button>
             <label for="options"></label>
-            <select name="options" id="options" onchange="choose_starter_program()">
+            <select class="main_btn" name="options" id="options" onchange="choose_starter_program()">
               <option value="none">None</option>
               <option value="raster_fill">Raster Fill</option>
               <option value="gradient">Gradient</option>
               <option value="hello_world">Hello World</option>
             </select>
-            <button disabled id="run-program"> Run Program</button>
+            <button class="main_btn" disabled id="run-program"> Run Program</button>
+            <button class="main_btn" disabled id="pause-program">⏸</button>
             <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
             <label id="execute-label">Time per executions: 1 ms</label>
 
