@@ -66,6 +66,7 @@ body {
     margin-left: auto;
 }
 
+/* Unified Base Styles */
 #compile-btn, #options, #run-program {
     margin: 10px 0;
     padding: 10px 20px;
@@ -77,13 +78,13 @@ body {
     border-radius: 4px;
 }
 
-#compile-btn:hover, #options:hover, #run-program:hover {
-    background-color: var(--green-dark);
-}
-
-#compile-btn:disabled, #options:disabled #run-program:disabled {
-    background-color: var(--grey);
-    cursor: not-allowed;
+#compile-btn:disabled,
+#options:disabled,
+#run-program:disabled {
+    background-color: var(--grey) !important;
+    color: #666 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
 }
 
 .loading {

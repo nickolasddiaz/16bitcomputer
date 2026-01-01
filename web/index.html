@@ -6,14 +6,14 @@
         <title>Nickolas' Compiler</title>
 
         <!-- Personal logic for the page-->
-        <script type="module" src="./main.js"></script>
+        <script type="module" src="main.js"></script>
+
+        <!-- load personal css -->
+        <link rel="stylesheet" href="styles.css">
 
         <!-- PyScript CSS and JS -->
         <link rel="stylesheet" href="https://pyscript.net/releases/2025.11.2/core.css">
         <script type="module" src="https://pyscript.net/releases/2025.11.2/core.js"></script>
-
-        <!-- load personal css -->
-        <link rel="stylesheet" href="styles.css">
 
         <!-- PyScript main script -->
         <script type="py" config="./pyscript.json" src="WebInterface.py"></script>
@@ -38,7 +38,7 @@
               <option value="gradient">Gradient</option>
               <option value="hello_world">Hello World</option>
             </select>
-            <button id="run-program"> Run Program</button>
+            <button disabled id="run-program"> Run Program</button>
             <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
             <label id="execute-label">Time per executions: 1 ms</label>
 

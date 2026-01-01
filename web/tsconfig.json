@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "rootDir": "./",
-    "outDir": "./dist",
+    "rootDir": "./typescript/",
+    "outDir": "./",
 
     "module": "esnext",
     "target": "es6",
@@ -20,7 +20,9 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowJs": false
   },
-  "include": ["./*.ts"]
+  "include": ["./typescript/**/*"],
+  "exclude": ["node_modules"]
 }

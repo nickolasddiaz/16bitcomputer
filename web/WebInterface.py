@@ -1,5 +1,5 @@
 import js
-from js import document, console, displayMessage, update_textboxes, globalThis
+from js import document, console, globalThis, update_textboxes, displayMessage
 from pyodide.ffi import to_js, create_proxy
 from pyodide.http import pyfetch
 
@@ -54,13 +54,17 @@ class WebInterface(Compiler):
             document.getElementById('assembly').value = assembly
             document.getElementById('binary').value = binary
             document.getElementById('program-error').value = error
-            globalThis.binary_to_assembly_mappings = to_js(binary_to_assembly_mappings)
+            binary_to_assembly_mappings = to_js(binary_to_assembly_mappings)
+
+            compile_button = document.getElementById('run-program')
 
             if error == '':
                 document.getElementById('program-error').value = "No errors - compilation successful!"
                 displayMessage(f"Compilation completed in {execution_time}s", "success")
+                compile_button.disabled = False
             else:
                 displayMessage(f"Compilation resulted in errors: {error}", "error")
+                compile_button.disabled = True
 
             update_textboxes()
 
@@ -68,6 +72,7 @@ class WebInterface(Compiler):
             displayMessage(f"Compilation error: {e}")
             document.getElementById('program-error').value = f"Compilation failed: {str(e)}"
             update_textboxes()
+            document.getElementById('run-program').disabled = True
 
 # Load files on startup
 asyncio.ensure_future(initialize_app())
