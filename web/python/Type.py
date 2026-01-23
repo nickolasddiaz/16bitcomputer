@@ -225,4 +225,4 @@ class Compare(IntEnum):
 
 if __name__ == "__main__":
     for index, command in enumerate(Operand):
-        print(f"{index}:{command.name}")
+        print(f"{index:0x}:{command.name}")
