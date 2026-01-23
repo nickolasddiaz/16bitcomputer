@@ -191,7 +191,12 @@ class RamVar:
         self.val: int = val
 
     def __str__(self) -> str:
-        return f"[bp + {self.val}]"
+        if self.val == 0:
+            return f"[bp]"
+        elif self.val > 0:
+            return f"[bp + {self.val}]"
+        else:
+            return f"[bp - {-self.val}]"
 
 
 class RegVar:

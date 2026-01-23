@@ -1,12 +1,3 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 const CANVAS_SIZE = 32;
 const COLOR_SIZE = 32;
 const REG_SIZE = 16;
@@ -31,6 +22,16 @@ export class emulator {
     set timer(value) {
         this._timer = value;
     }
+    ram;
+    canvas;
+    status_flags;
+    register;
+    pc;
+    _program;
+    op;
+    _timer;
+    start_canvas_timer;
+    instruct_element;
     reset() {
         this.canvas.reset();
         this.status_flags.reset();
@@ -73,109 +74,107 @@ export class emulator {
         }
         this.op.set(i++, [this.RTRN.bind(this), DATA.None]);
     }
-    run() {
-        return __awaiter(this, void 0, void 0, function* () {
-            let program_start = performance.now();
-            // @ts-ignore
-            while (window.go) {
-                while (performance.now() - (program_start + this._timer) < 4) { //measured in milliseconds
-                    yield sleep(1);
-                }
-                program_start = performance.now();
-                yield sleep(this._timer);
-                if (performance.now() - this.start_canvas_timer > 100) {
-                    this.start_canvas_timer = performance.now();
-                    this.canvas.render();
-                }
-                let temp = this._program[this.pc.count];
-                let instruct = (temp >> 8);
-                let reg2 = temp & 0x000F;
-                let reg1 = (temp & 0x00F0) >> 4;
-                let temp1 = this.op.get(instruct);
-                let data_type = temp1[1];
-                let operand = temp1[0];
-                let name = operand.name;
-                if (name.startsWith('bound ')) {
-                    name = name.substring(6);
-                }
-                let instruct_name = name;
-                let item1;
-                let item2;
-                let index;
-                switch (data_type) {
-                    case DATA.REG_REG:
-                        item1 = this.register.getRegItem(reg1);
-                        item2 = this.register.getRegItem(reg2);
-                        operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.REG_IMM8:
-                        item1 = this.register.getRegItem(reg1);
-                        this.pc.next();
-                        item2 = this._program[this.pc.count];
-                        operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.REG_RAM:
-                        item1 = this.register.getRegItem(reg1);
-                        this.pc.next();
-                        item2 = this.ram[this._program[this.pc.count]];
-                        operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.RAM_REG:
-                        this.pc.next();
-                        index = this._program[this.pc.count];
-                        item1 = this.ram[index];
-                        item2 = this.register.getRegItem(reg1);
-                        operand(item2, item1, this.save_ram.bind(this, index));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.RAM_IMM8:
-                        this.pc.next();
-                        index = this._program[this.pc.count];
-                        item1 = this.ram[index];
-                        this.pc.next();
-                        item2 = this._program[this.pc.count];
-                        operand(item2, item1, this.save_ram.bind(this, index));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.RAM_RAM:
-                        this.pc.next();
-                        index = this._program[this.pc.count];
-                        item1 = this.ram[index];
-                        this.pc.next();
-                        let index2 = this._program[this.pc.count];
-                        item2 = this.ram[index2];
-                        operand(item2, item1, this.save_ram.bind(this, index));
-                        instruct_name += ` ${item2} ${item1}`;
-                        break;
-                    case DATA.REG:
-                        item1 = this.register.getRegItem(reg1);
-                        operand(item1);
-                        instruct_name += ` ${item1}`;
-                        break;
-                    case DATA.IMM8:
-                        this.pc.next();
-                        item1 = this._program[this.pc.count];
-                        operand(item1);
-                        instruct_name += ` ${item1}`;
-                        break;
-                    case DATA.RAM:
-                        this.pc.next();
-                        item1 = this.ram[this._program[this.pc.count]];
-                        operand(item1);
-                        instruct_name += ` ${item1}`;
-                        break;
-                    case DATA.None:
-                        operand();
-                        break;
-                }
-                this.instruct_element.textContent = instruct_name;
-                this.pc.next();
+    async run() {
+        let program_start = performance.now();
+        // @ts-ignore
+        while (window.go) {
+            while (performance.now() - (program_start + this._timer) < 4) { //measured in milliseconds
+                await sleep(1);
             }
-            this.canvas.render();
-        });
+            program_start = performance.now();
+            await sleep(this._timer);
+            if (performance.now() - this.start_canvas_timer > 100) {
+                this.start_canvas_timer = performance.now();
+                this.canvas.render();
+            }
+            let temp = this._program[this.pc.count];
+            let instruct = (temp >> 8);
+            let reg2 = temp & 0x000F;
+            let reg1 = (temp & 0x00F0) >> 4;
+            let temp1 = this.op.get(instruct);
+            let data_type = temp1[1];
+            let operand = temp1[0];
+            let name = operand.name;
+            if (name.startsWith('bound ')) {
+                name = name.substring(6);
+            }
+            let instruct_name = name;
+            let item1;
+            let item2;
+            let index;
+            switch (data_type) {
+                case DATA.REG_REG:
+                    item1 = this.register.getRegItem(reg1);
+                    item2 = this.register.getRegItem(reg2);
+                    operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.REG_IMM8:
+                    item1 = this.register.getRegItem(reg1);
+                    this.pc.next();
+                    item2 = this._program[this.pc.count];
+                    operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.REG_RAM:
+                    item1 = this.register.getRegItem(reg1);
+                    this.pc.next();
+                    item2 = this.ram[this._program[this.pc.count]];
+                    operand(item2, item1, this.register.setRegItem.bind(this.register, reg1));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.RAM_REG:
+                    this.pc.next();
+                    index = this._program[this.pc.count];
+                    item1 = this.ram[index];
+                    item2 = this.register.getRegItem(reg1);
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.RAM_IMM8:
+                    this.pc.next();
+                    index = this._program[this.pc.count];
+                    item1 = this.ram[index];
+                    this.pc.next();
+                    item2 = this._program[this.pc.count];
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.RAM_RAM:
+                    this.pc.next();
+                    index = this._program[this.pc.count];
+                    item1 = this.ram[index];
+                    this.pc.next();
+                    let index2 = this._program[this.pc.count];
+                    item2 = this.ram[index2];
+                    operand(item2, item1, this.save_ram.bind(this, index));
+                    instruct_name += ` ${item2} ${item1}`;
+                    break;
+                case DATA.REG:
+                    item1 = this.register.getRegItem(reg1);
+                    operand(item1);
+                    instruct_name += ` ${item1}`;
+                    break;
+                case DATA.IMM8:
+                    this.pc.next();
+                    item1 = this._program[this.pc.count];
+                    operand(item1);
+                    instruct_name += ` ${item1}`;
+                    break;
+                case DATA.RAM:
+                    this.pc.next();
+                    item1 = this.ram[this._program[this.pc.count]];
+                    operand(item1);
+                    instruct_name += ` ${item1}`;
+                    break;
+                case DATA.None:
+                    operand();
+                    break;
+            }
+            this.instruct_element.textContent = instruct_name;
+            this.pc.next();
+        }
+        this.canvas.render();
     }
     save_ram(index, value) {
         this.ram[index] = value;
@@ -217,12 +216,12 @@ export class emulator {
         this.pc.JMP(value); }
     CALL(value) {
         let sp = this.register.getRegItem(STACK_POINTER);
-        this.ram[sp + 1] = this.pc.count;
+        this.ram[sp] = this.pc.count + 1;
         this.pc.JMP(value);
     }
     RTRN() {
         let sp = this.register.getRegItem(STACK_POINTER);
-        this.pc.JMP(this.ram[sp + 1]);
+        this.pc.JMP(this.ram[sp]);
     }
     NOP() { }
     HALT() {
@@ -238,6 +237,14 @@ export class emulator {
     }
 }
 class Canvas {
+    ctx;
+    imageData;
+    data;
+    x;
+    y;
+    r;
+    g;
+    b;
     constructor(canvas) {
         // XTerm256 color model (8-bit)
         // using rgb555Data, a 16-bit integer containing RRRRR GGGGG BBBBB
@@ -285,6 +292,12 @@ class Canvas {
     }
 }
 class StatusFlags {
+    _greater;
+    _equal;
+    _less;
+    greater_cell;
+    equal_cell;
+    less_cell;
     constructor(greater_element, equal_element, less_element) {
         this._greater = false;
         this._equal = false;
@@ -318,6 +331,8 @@ class StatusFlags {
     }
 }
 class Register {
+    reg;
+    cells;
     constructor(cell_id) {
         this.reg = new Int16Array(REG_SIZE);
         this.cells = cell_id;
@@ -348,6 +363,8 @@ class Register {
     }
 }
 class ProgramCounter {
+    pc_cell;
+    count;
     constructor(pc_element) {
         this.pc_cell = pc_element;
         this.pc_cell.textContent = String(0);

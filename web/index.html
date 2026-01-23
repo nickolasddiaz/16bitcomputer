@@ -3,64 +3,53 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1.0">
-        <title>Nickolas' Compiler</title>
-
+        <title>Simple compiler, and emulator by Nickolas</title>
         <!-- Personal logic for the page-->
         <script type="module" src="main.js"></script>
-
         <!-- load personal css -->
         <link rel="stylesheet" href="styles.css">
-
         <!-- PyScript CSS and JS -->
-        <link rel="stylesheet" href="https://pyscript.net/releases/2025.11.2/core.css">
-        <script type="module" src="https://pyscript.net/releases/2025.11.2/core.js"></script>
-
+        <link rel="stylesheet" href="https://pyscript.net/releases/2026.1.1/core.css">
+        <script type="module" src="https://pyscript.net/releases/2026.1.1/core.js"></script>
         <!-- PyScript main script -->
         <script type="py" config="./pyscript.json" src="WebInterface.py"></script>
-
         <!-- emulator script-->
         <script type="module" src="./emulator.js" defer></script>
-
     </head>
     <body>
-    <div class="sticky-nav">
-        <h1>Nickolas' Compiler</h1>
+        <div class="sticky-nav">
+            <h1>Simple compiler, and emulator by Nickolas</h1>
             <div id="loadingOverlay">
-              <div id="loadingBar">
-                <div id="loadingProgress"></div>
-              </div>
+                <div id="loadingBar">
+                    <div id="loadingProgress"></div>
+                </div>
             </div>
-            <button class="main_btn" id="compile-btn" onclick="compileProgram();">Compile</button>
+            <button disabled class="main_btn" id="compile-btn" onclick="compileProgram();">Compile</button>
             <label for="options"></label>
-            <select class="main_btn" name="options" id="options" onchange="choose_starter_program()">
-              <option value="none">None</option>
-              <option value="raster_fill">Raster Fill</option>
-              <option value="gradient">Gradient</option>
-              <option value="hello_world">Hello World</option>
+            <select disabled class="main_btn" name="options" id="options" onchange="choose_starter_program()">
+                <option value="none">None</option>
+                <option value="raster_fill">Raster Fill</option>
+                <option value="gradient">Gradient</option>
+                <!--<option value="hello_world">Hello World</option>-->
             </select>
             <button class="main_btn" disabled id="run-program"> Run Program</button>
             <button class="main_btn" disabled id="pause-program">⏸</button>
             <input type="range" min="0" max="16" value="0" class="slider" id="execute-time">
             <label id="execute-label">Time per executions: 1 ms</label>
-
             <div id="messageContainer" class="message-container">
                 <div class="close-button" id="closeMessage">&times;</div>
                 <div class="message-text"></div>
             </div>
-
-
-        <div class="tab">
-            <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
-            <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
-            <button class="tablinks" onclick="openTab(event, 'parse-tree')">Parse Tree</button>
-            <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
-            <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
-            <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
-
-            <button class="tablinks output-tab" onclick="handleSidebar(event, 'computer')">☰ Output</button>
+            <div class="tab">
+                <button class="tablinks active" onclick="openTab(event, 'program')">Program</button>
+                <button class="tablinks" onclick="openTab(event, 'grammar')">Grammar</button>
+                <button class="tablinks" onclick="openTab(event, 'parse-tree')">Parse Tree</button>
+                <button class="tablinks" onclick="openTab(event, 'assembly')">Assembly</button>
+                <button class="tablinks" onclick="openTab(event, 'binary')">Binary</button>
+                <button class="tablinks" onclick="openTab(event, 'program-error')">Errors</button>
+                <!--<button class="tablinks output-tab" onclick="handleSidebar(event, 'computer')">☰ Output</button>-->
+            </div>
         </div>
-        </div>
-
         <div class="main-content-layout">
             <div id="central-editor-area">
                 <textarea id="program" class="tab_content" style="display: block;" name="program" placeholder="Enter your program here">Loading...</textarea>
@@ -73,55 +62,58 @@
             <div id="computer" class="output-computer-panel tab_content">
                 <!-- The inner content of the computer panel -->
                 <div class="computer-display-area" style="text-align: center;">
-
                     <div style="text-align: center;">
                         <canvas id="pixelCanvas" width="32" height="32"></canvas>
                         <div class="status-section">
-                          <h3>Comparison Flags</h3>
-                          <div class="flags-container">
-                            <div class="flag">
-                              <span class="flag-label">GREATER</span>
-                              <span id="greater_id" class="flag-value inactive">0</span>
+                            <h3>Comparison Flags</h3>
+                            <div class="flags-container">
+                                <div class="flag">
+                                    <span class="flag-label">GREATER</span>
+                                    <span id="greater_id" class="flag-value inactive">0</span>
+                                </div>
+                                <div class="flag">
+                                    <span class="flag-label">EQUAL</span>
+                                    <span id="equal_id" class="flag-value inactive">0</span>
+                                </div>
+                                <div class="flag">
+                                    <span class="flag-label">LESS</span>
+                                    <span id="less_id" class="flag-value inactive">0</span>
+                                </div>
                             </div>
-                            <div class="flag">
-                              <span class="flag-label">EQUAL</span>
-                              <span id="equal_id" class="flag-value inactive">0</span>
-                            </div>
-                            <div class="flag">
-                              <span class="flag-label">LESS</span>
-                              <span id="less_id" class="flag-value inactive">0</span>
-                            </div>
-                          </div>
                         </div>
                         <div class="status-sections-row">
                             <!-- Program Counter -->
                             <div class="status-section">
-                              <h3>Program Counter</h3>
-                              <div class="pc-display">
-                                <span>PC:</span>
-                                <span id="pc_id" class="pc-value">0</span>
-                              </div>
+                                <h3>Program Counter</h3>
+                                <div class="pc-display">
+                                    <span>PC:</span>
+                                    <span id="pc_id" class="pc-value">0</span>
+                                </div>
                             </div>
-
                             <!-- Instructions -->
                             <div class="status-section">
-                              <h3>Instructions</h3>
-                              <div class="pc-display">
-                                <span>Instructions:</span>
-                                <span id="instruct_id" class="pc-value"></span>
-                              </div>
+                                <h3>Instructions</h3>
+                                <div class="pc-display">
+                                    <span>Instructions:</span>
+                                    <span id="instruct_id" class="pc-value"></span>
+                                </div>
                             </div>
                         </div>
-
                         <!-- Registers Table -->
                         <div class="status-section">
-                          <h3>Registers</h3>
-                          <table class="registers-table" id="register_table"> <!-- Generate 16 registers -->
-                            <tr id="register-id"><td>Register</td></tr>
-                            <tr id="register-val"><td>Value</td></tr>
-                          </table>
+                            <h3>Registers</h3>
+                            <div class="table-scroll-container">
+                                <table class="registers-table" id="register_table">
+                                    <tr id="register-id">
+                                        <td>Register</td>
+                                    </tr>
+                                    <tr id="register-val">
+                                        <td>Value</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
-                   </div>
+                    </div>
                 </div>
             </div>
         </div>

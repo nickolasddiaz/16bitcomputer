@@ -1,12 +1,12 @@
 from typing import Any
 
-from lark import Transformer
+from lark import Transformer, v_args
 
 from Command import Command, CommandJump, CommandLabel, CommandReturn, CommandInnerStart, CommandInnerEnd
 from JumpManager import jump_manager
 from MemoryManager import MemoryManager
 from SharedFunc import register_id, CompileHelper, SharedFunc
-from Type import Operand, RamVar, base_pointer, stack_pointer, Compare
+from Type import Operand, base_pointer, stack_pointer, Compare
 
 
 class Parser(Transformer):
@@ -33,7 +33,8 @@ class Parser(Transformer):
     def NAME(self, name):
         return name.value
 
-    def bit_not(self, items):
+    @v_args(meta=True)
+    def bit_not(self, meta, items):
         """
         Takes previous variable performs NOT and returns the new temp variable
         :return: tuple[new variable, the previous Commands along as its own]
@@ -43,9 +44,10 @@ class Parser(Transformer):
         # easily separates the input into the variable and commands
         product, final_commands = self.compiler_helper.extract_variable_and_commands(items[0], [])
         temp_name = self.compiler_helper.get_temp_ram() # gets new temp variable
-        return temp_name, final_commands + [Command(Operand.NOT, temp_name, product)]
+        return temp_name, final_commands + [Command(Operand.NOT, temp_name, product, line_num=meta.line)]
 
-    def negative(self, items):
+    @v_args(meta=True)
+    def negative(self, meta, items):
         """
         Takes previous variable performs NEG and returns the new temp variable
         :return: tuple[new variable, the previous Commands along as its own]
@@ -55,11 +57,11 @@ class Parser(Transformer):
         # easily separates the input into the variable and commands
         product, final_commands = self.compiler_helper.extract_variable_and_commands(items[0], [])
         temp_name = self.compiler_helper.get_temp_ram() # gets new temp variable
-        return temp_name, final_commands + [Command(Operand.NEG, temp_name, product)]
+        return temp_name, final_commands + [Command(Operand.NEG, temp_name, product, line_num=meta.line)]
 
     # --- product functions --------------------------
 
-    def process_binary_operation(self, input1: int | str | tuple[str,list[Command]], input2: int | str | tuple[str,list[Command]], op: Operand) -> int | str | tuple[int | str, list[Command]]:
+    def process_binary_operation(self, input1: int | str | tuple[str,list[Command]], input2: int | str | tuple[str,list[Command]], op: Operand, line: int) -> int | str | tuple[int | str, list[Command]]:
         """
         Takes two inputs performs the necessary product like +-*/%.
         Processes cases like the inputs being integers, registers or memory.
@@ -107,61 +109,72 @@ class Parser(Transformer):
             case True, True: # both are registers
                 # free the unused register coming from the destination
                 self.compiler_helper.free_reg(int(product2[1:]))
-                final_commands.append(Command(op, product1, product2))
+                final_commands.append(Command(op, product1, product2, line_num=line))
                 return_var = product1
             case False, True: # right is register
                 # free the unused register coming from the destination
                 self.compiler_helper.free_reg(int(product2[1:]))
-                final_commands.append(Command(op, product2, product1))
+                final_commands.append(Command(op, product2, product1, line_num=line))
                 return_var = product2
             case True, False: # left is register
-                final_commands.append(Command(op, product1, product2))
+                final_commands.append(Command(op, product1, product2, line_num=line))
                 return_var = product1
             case False, False: # none is a register
                 # first get a temp register
                 # move the first product into the register
                 # then perform the operation on the second product
                 temp_reg = self.compiler_helper.get_reg()
-                final_commands.append(Command(Operand.MOV, temp_reg, product1))
-                final_commands.append(Command(op, temp_reg, product2))
+                final_commands.append(Command(Operand.MOV, temp_reg, product1, line_num=line))
+                final_commands.append(Command(op, temp_reg, product2, line_num=line))
                 return_var = temp_reg
 
         return return_var, final_commands
 
-    def add(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.ADD)
-    def sub(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.SUB)
-    def bit_and(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.AND)
-    def bit_or(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.OR)
-    def bit_xor(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.XOR)
-    def mult(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.MULT)
-    def div(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.DIV)
-    def quot(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.QUOT)
-    def left_shift(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.SHL)
-    def right_shift(self, items):
-        return self.process_binary_operation(items[0], items[1], Operand.SHR)
+    @v_args(meta=True)
+    def add(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.ADD, meta.line)
+    @v_args(meta=True)
+    def sub(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.SUB, meta.line)
+    @v_args(meta=True)
+    def bit_and(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.AND, meta.line)
+    @v_args(meta=True)
+    def bit_or(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.OR, meta.line)
+    @v_args(meta=True)
+    def bit_xor(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.XOR, meta.line)
+    @v_args(meta=True)
+    def mult(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.MULT, meta.line)
+    @v_args(meta=True)
+    def div(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.DIV, meta.line)
+    @v_args(meta=True)
+    def quot(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.QUOT, meta.line)
+    @v_args(meta=True)
+    def left_shift(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.SHL, meta.line)
+    @v_args(meta=True)
+    def right_shift(self, meta, items):
+        return self.process_binary_operation(items[0], items[1], Operand.SHR, meta.line)
 
-    
-    def increment(self, items) -> list[Command]:
+    @v_args(meta=True)
+    def increment(self, meta, items) -> list[Command]:
         """ processes examples like var++"""
-        return [Command(Operand.ADD, items[0], 1)]
-    
-    def decrement(self, items) -> list[Command]:
-        """ processes examples like var--"""
-        return [Command(Operand.SUB, items[0], 1)]
+        return [Command(Operand.ADD, items[0], 1, line_num=meta.line)]
 
-    
+    @v_args(meta=True)
+    def decrement(self, meta, items) -> list[Command]:
+        """ processes examples like var--"""
+        return [Command(Operand.SUB, items[0], 1, line_num=meta.line)]
+
+
     # --- assignments functions --------------------------
 
-    def process_assignment_operation(self, input1: str | int | tuple[str,list[Command]], input2: str | int | tuple[str,list[Command]], op: Operand) -> list[Command]:
+    def process_assignment_operation(self, input1: str | int | tuple[str,list[Command]], input2: str | int | tuple[str,list[Command]], op: Operand, line: int) -> list[Command]:
         """
         Helps performs an operand on two inputs.
         Returns the list of commands plus the operand
@@ -171,26 +184,31 @@ class Parser(Transformer):
         product1, final_commands = self.compiler_helper.extract_variable_and_commands(input1, final_commands)
         self.compiler_helper.free_all_reg()
 
-        return final_commands + [Command(op, product1, product2)]
-    
-    def assign_var(self, items) -> list[Command]: # a = b
-        return self.process_assignment_operation(items[0], items[1], Operand.MOV)
-    
-    def add_assign_var(self, items) -> list[Command]: # a += b
-        return self.process_assignment_operation(items[0], items[1], Operand.ADD)
-    
-    def sub_assign_var(self, items) -> list[Command]: # a-= b
-        return self.process_assignment_operation(items[0], items[1], Operand.SUB)
-    
-    def mul_assign_var(self, items) -> list[Command]: # a*= b
-        return self.process_assignment_operation(items[0], items[1], Operand.MULT)
-    
-    def div_assign_var(self, items) -> list[Command]: # a /= b
-        return self.process_assignment_operation(items[0], items[1], Operand.DIV)
-    
-    # --- Comparison --------------------------
+        return final_commands + [Command(op, product1, product2, line_num=line)]
 
-    def compare_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+    @v_args(meta=True)
+    def assign_var(self, meta, items) -> list[Command]: # a = b
+        return self.process_assignment_operation(items[0], items[1], Operand.MOV, meta.line)
+
+    @v_args(meta=True)
+    def add_assign_var(self, meta, items) -> list[Command]: # a += b
+        return self.process_assignment_operation(items[0], items[1], Operand.ADD, meta.line)
+
+    @v_args(meta=True)
+    def sub_assign_var(self, meta, items) -> list[Command]: # a-= b
+        return self.process_assignment_operation(items[0], items[1], Operand.SUB, meta.line)
+
+    @v_args(meta=True)
+    def mul_assign_var(self, meta, items) -> list[Command]: # a*= b
+        return self.process_assignment_operation(items[0], items[1], Operand.MULT, meta.line)
+
+    @v_args(meta=True)
+    def div_assign_var(self, meta, items) -> list[Command]: # a /= b
+        return self.process_assignment_operation(items[0], items[1], Operand.DIV, meta.line)
+
+    # --- Comparison --------------------------
+    @v_args(meta=True)
+    def compare_equal(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         """
         Takes in two list of operands and compares them with compare and equal.
         Returns a tuple with the list of commands, tuple success label, fail label, and the compare type
@@ -199,28 +217,34 @@ class Parser(Transformer):
         AND for things like a == b && a == b
         OR for things like a == b && a == b
         """
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JEQ)], (None, None, Compare.SIMPLE)
-    
-    def compare_not_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.SIMPLE)
-    
-    def compare_greater_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JGE)], (None, None, Compare.SIMPLE)
-    
-    def compare_less_equal(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JLE)], (None, None, Compare.SIMPLE)
-    
-    def compare_greater(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JG)], (None, None, Compare.SIMPLE)
-    
-    def compare_less(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
-        return self.process_assignment_operation(items[0], items[1], Operand.CMP) + [Command(Operand.JL)], (None, None, Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JEQ, line_num=meta.line)], (None, None, Compare.SIMPLE)
 
-    def zero_compare(self, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+    @v_args(meta=True)
+    def compare_not_equal(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JNE, line_num=meta.line)], (None, None, Compare.SIMPLE)
+
+    @v_args(meta=True)
+    def compare_greater_equal(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JGE, line_num=meta.line)], (None, None, Compare.SIMPLE)
+
+    @v_args(meta=True)
+    def compare_less_equal(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JLE, line_num=meta.line)], (None, None, Compare.SIMPLE)
+
+    @v_args(meta=True)
+    def compare_greater(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JG, line_num=meta.line)], (None, None, Compare.SIMPLE)
+
+    @v_args(meta=True)
+    def compare_less(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
+        return self.process_assignment_operation(items[0], items[1], Operand.CMP, meta.line) + [Command(Operand.JL, line_num=meta.line)], (None, None, Compare.SIMPLE)
+
+    @v_args(meta=True)
+    def zero_compare(self, meta, items) -> tuple[list[Any], tuple[None, None, Compare]]:
         """
         Computes the compare for a single operand. For example if (a + 5)
         """
-        return self.process_assignment_operation(items[0], 0, Operand.CMP) + [Command(Operand.JNE)], (None, None, Compare.SIMPLE)
+        return self.process_assignment_operation(items[0], 0, Operand.CMP, meta.line) + [Command(Operand.JNE)], (None, None, Compare.SIMPLE)
 
     def and_compare(self, items: list[tuple[list[Command], tuple[int, int, Compare]]]) -> tuple[list[Command], tuple[int, int, Compare]]:
         """
@@ -359,7 +383,7 @@ class Parser(Transformer):
                           [CommandLabel(start_loop_label)] + condition_block)
 
         return [CommandInnerStart()] + final_commands + [CommandInnerEnd()]
-    
+
     def do_while_loop(self, items) -> list[Command]:
         """
         Manages the logic in the do while loop
@@ -469,7 +493,8 @@ class Parser(Transformer):
         return result
 
     # --- function declaration --------------------------
-    def function_declaration(self, items) -> list[Command]:
+    @v_args(meta=True)
+    def function_declaration(self, meta, items) -> list[Command]:
         """
         Takes in the function name, arguments and main block and returns a list of commands
         """
@@ -504,12 +529,12 @@ class Parser(Transformer):
         function_label = jump_manager.get_function(function_name)
         # starts off every block with setting up the base and stack pointer
         final_block = [CommandLabel(function_label),
-                       Command(Operand.PUSH, base_pointer()),  # push the base_pointer
-                       Command(Operand.MOV, base_pointer(), stack_pointer()),  # starting function's frame
+                       Command(Operand.PUSH, base_pointer(), line_num=meta.line),  # push the base_pointer
+                       Command(Operand.MOV, base_pointer(), stack_pointer(), line_num=meta.line),  # starting function's frame
                        ]
 
         if len(function_arguments) != 0:
-            final_block.append(Command(Operand.ADD, stack_pointer(), len(function_arguments)))
+            final_block.append(Command(Operand.ADD, stack_pointer(), len(function_arguments), line_num=meta.line))
 
         # processing the data to ensure it is correct removing the tuples
         for i, arg in enumerate(main_block):
@@ -532,7 +557,7 @@ class Parser(Transformer):
             elif item.operand == Operand.INNER_END:
                 variable_process.inner_end()
             else:
-                final_block.extend(variable_process.allocate_command(item, i, function_name))
+                final_block.extend(variable_process.allocate_command(item, i, function_name, item.line_num))
 
         # after the main function is called halt
         if function_name == "main":
@@ -544,16 +569,17 @@ class Parser(Transformer):
 
     def list_assign(self, items):
         return items
-    
+
     def empty_args(self, items):
         return []
-    
+
     def args(self, items):
         return items
-    
-    def function_call(self, items) -> tuple[str,list[Command]]:
+
+    @v_args(meta=True)
+    def function_call(self, meta, items) -> tuple[str,list[Command]]:
         # destination is returns and source is arguments, .call_label is the name of the function
-        temp = Command(Operand.CALL_HELPER, [], items[1])
+        temp = Command(Operand.CALL_HELPER, [], items[1], line_num=meta.line)
         temp.call_label = items[0] # the name of the function
         return "", [temp]
 
@@ -561,11 +587,14 @@ class Parser(Transformer):
         return []
     def return_args(self, items):
         return items
-    def _return(self, items):
-        return_items: list[str|int] = items[0] if items else []
-        return [CommandReturn(return_items)]
 
-    def multi_assign_var(self, items) -> list[Command]:
+    @v_args(meta=True)
+    def _return(self, meta, items):
+        return_items: list[str|int] = items[0] if items else []
+        return [CommandReturn(return_items, line_num=meta.line)]
+
+    @v_args(meta=True)
+    def multi_assign_var(self, meta, items) -> list[Command]:
         """
         Process multiple function assignment for example:
         a, b, c, d = 6, new_function(a,b), d
@@ -588,7 +617,7 @@ class Parser(Transformer):
         for i, assign in enumerate(from_assign):
             match assign:
                 case int()| str(): # case for variables and integers
-                    final_commands.append(Command(Operand.MOV, to_assign[i + var_offset], assign))
+                    final_commands.append(Command(Operand.MOV, to_assign[i + var_offset], assign, line_num=meta.line))
                 case tuple():
                     if assign[0] == "": # case for functions
                         assign[1][-1].destination = to_assign[i + var_offset: i + var_offset + size_function]
@@ -599,7 +628,7 @@ class Parser(Transformer):
                         final_commands.extend(assign[1])
                     else: # case for variables with a list of commands
                         final_commands.extend(assign[1])
-                        final_commands.append(Command(Operand.MOV, to_assign[i + var_offset], assign[0]))
+                        final_commands.append(Command(Operand.MOV, to_assign[i + var_offset], assign[0], line_num=meta.line))
 
 
         return final_commands

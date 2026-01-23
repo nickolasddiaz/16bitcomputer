@@ -14,7 +14,9 @@ declare const window: {
   options_btn: HTMLButtonElement;
   run_btn: HTMLButtonElement;
   pause_btn: HTMLButtonElement;
+  program_btn: HTMLButtonElement;
 } & Window;
+
 
 window.go = false;
 window.restart = true;
@@ -22,6 +24,7 @@ window.compile_btn = document.getElementById('compile-btn') as HTMLButtonElement
 window.options_btn = document.getElementById('options')  as HTMLButtonElement;
 window.run_btn = document.getElementById('run-program')  as HTMLButtonElement;
 window.pause_btn = document.getElementById('pause-program')  as HTMLButtonElement;
+window.program_btn = document.getElementById('program')  as HTMLButtonElement;
 let computer: emulator;
 
 function setupLineNumbers(taId: string) {
@@ -95,10 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.run_btn.onclick = window.runProgram;
     window.pause_btn.onclick = window.pauseProgram;
-    window.compile_btn.disabled = false;
-    window.options_btn.disabled = false;
-    window.run_btn.disabled = true;
-
 });
 
 window.pauseProgram = () =>{
@@ -168,6 +167,9 @@ window.openTab = (evt:Event, name:string) => {
     } else if (target) { // For other div tab_content elements (like parse-tree)
         target.style.display = "block";
     }
+    if (["assembly", "program"].includes(name)) {
+        window.update_textboxes();
+    }
 };
 
 window.handleSidebar = (evt: Event, name: string) => {
@@ -187,14 +189,14 @@ window.handleSidebar = (evt: Event, name: string) => {
 
 
 window.choose_starter_program = async () => {
-    const selectedValue:string = (<HTMLSelectElement>document.getElementById("options")).value;
+    const selectedValue:string = window.options_btn.value;
     if (selectedValue === "none") {
-        (<HTMLButtonElement>document.getElementById('program')).value = "// Enter your program here";
+        window.program_btn.value = "// Enter your program here";
         return;
     }
     await fetch("./examples/" + selectedValue + ".txt")
         .then(async response =>
-            (<HTMLTextAreaElement>document.getElementById('program')).value = await response.text())
+            window.program_btn.value = await response.text())
         .catch(error => window.displayMessage('Error fetching file:' + error, "error"));
     window.update_textboxes();
 };
@@ -243,3 +245,5 @@ window.update_textboxes = () =>{
         (<HTMLTextAreaElement>document.getElementById(id)).dispatchEvent(new Event('input'));
     });
 };
+
+

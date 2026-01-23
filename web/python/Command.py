@@ -4,7 +4,7 @@ from Type import Operand, RegVar, RamVar
 from JumpManager import jump_manager
 
 class Command:
-    def __init__(self, op, dest=None, source=None, jump_label= None):
+    def __init__(self, op, dest=None, source=None, jump_label= None, line_num:int= -1):
         """
         Forms of a command:
         Operand
@@ -18,6 +18,7 @@ class Command:
         self.source: int | str | RamVar | RegVar | list[int | str] | None = source
         self.jump_label: int|None = jump_label
         self.call_label: str = ""
+        self.line_num = line_num
 
     def __str__(self) -> str:
         """

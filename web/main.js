@@ -1,12 +1,3 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 import { emulator } from "./emulator.js";
 window.go = false;
 window.restart = true;
@@ -14,6 +5,7 @@ window.compile_btn = document.getElementById('compile-btn');
 window.options_btn = document.getElementById('options');
 window.run_btn = document.getElementById('run-program');
 window.pause_btn = document.getElementById('pause-program');
+window.program_btn = document.getElementById('program');
 let computer;
 function setupLineNumbers(taId) {
     const ta = document.getElementById(taId);
@@ -67,14 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const slider = document.getElementById("execute-time");
     const output = document.getElementById("execute-label");
     slider.oninput = () => {
-        output.innerHTML = `Time per executions: ${String(Math.pow(2, Number(slider.value)))} ms`;
-        computer.timer = Math.pow(2, Number(slider.value));
+        output.innerHTML = `Time per executions: ${String(2 ** Number(slider.value))} ms`;
+        computer.timer = 2 ** Number(slider.value);
     };
     window.run_btn.onclick = window.runProgram;
     window.pause_btn.onclick = window.pauseProgram;
-    window.compile_btn.disabled = false;
-    window.options_btn.disabled = false;
-    window.run_btn.disabled = true;
 });
 window.pauseProgram = () => {
     window.go = !window.go;
@@ -138,6 +127,9 @@ window.openTab = (evt, name) => {
     else if (target) { // For other div tab_content elements (like parse-tree)
         target.style.display = "block";
     }
+    if (["assembly", "program"].includes(name)) {
+        window.update_textboxes();
+    }
 };
 window.handleSidebar = (evt, name) => {
     const mainLayoutContainer = document.querySelector('.main-content-layout'); // Target the main layout
@@ -153,17 +145,17 @@ window.handleSidebar = (evt, name) => {
         evt.currentTarget.classList.remove("active");
     }
 };
-window.choose_starter_program = () => __awaiter(void 0, void 0, void 0, function* () {
-    const selectedValue = document.getElementById("options").value;
+window.choose_starter_program = async () => {
+    const selectedValue = window.options_btn.value;
     if (selectedValue === "none") {
-        document.getElementById('program').value = "// Enter your program here";
+        window.program_btn.value = "// Enter your program here";
         return;
     }
-    yield fetch("./examples/" + selectedValue + ".txt")
-        .then((response) => __awaiter(void 0, void 0, void 0, function* () { return document.getElementById('program').value = yield response.text(); }))
+    await fetch("./examples/" + selectedValue + ".txt")
+        .then(async (response) => window.program_btn.value = await response.text())
         .catch(error => window.displayMessage('Error fetching file:' + error, "error"));
     window.update_textboxes();
-});
+};
 window.displayMessage = (message, type) => {
     const messageContainer = document.getElementById('messageContainer');
     let textSpan = messageContainer.querySelector('.message-text');

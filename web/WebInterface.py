@@ -1,5 +1,5 @@
 import js
-from js import document, console, globalThis, update_textboxes, displayMessage
+from js import document, console, globalThis, update_textboxes, displayMessage, window
 from pyodide.ffi import to_js, create_proxy
 from pyodide.http import pyfetch
 
@@ -44,9 +44,11 @@ class WebInterface(Compiler):
 
             # Get program text
             program_text = document.getElementById('program').value
+            count = program_text.count('\n') + 1
 
             # Run compiler
-            tree, assembly, binary, error, execution_time, binary_to_assembly_mappings = self._main(program_text)
+            (tree, assembly, binary, error, execution_time,
+             binary_to_assembly_mappings, code_mappings) = self._main(program_text)
 
             # Update UI with results
             parse_tree = document.getElementById('parse-tree')
@@ -54,7 +56,6 @@ class WebInterface(Compiler):
             document.getElementById('assembly').value = assembly
             document.getElementById('binary').value = binary
             document.getElementById('program-error').value = error
-            binary_to_assembly_mappings = to_js(binary_to_assembly_mappings)
 
             compile_button = document.getElementById('run-program')
 
@@ -69,7 +70,8 @@ class WebInterface(Compiler):
             update_textboxes()
 
         except Exception as e:
-            displayMessage(f"Compilation error: {e}")
+            import traceback
+            displayMessage(f"Compilation error: {str(traceback.print_exc())}")
             document.getElementById('program-error').value = f"Compilation failed: {str(e)}"
             update_textboxes()
             document.getElementById('run-program').disabled = True

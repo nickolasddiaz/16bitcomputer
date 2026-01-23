@@ -17,13 +17,13 @@ Main classes:
 import time
 from abc import ABC
 
-from lark import Lark, Transformer
+from lark import Lark, Transformer, v_args
 
 from JumpManager import jump_manager
 from Parser import Parser
 from Type import Operand
 
-
+@v_args(meta=True)
 class HtmlDetailsTransformer(Transformer):
     """
     Transforms a Lark Tree into an HTML string using <details> and <summary> tags.
@@ -47,12 +47,12 @@ class Compiler(ABC):
     def __init__(self, grammar: str):
         self.grammar: str = grammar
 
-    def _main(self, program: str) -> tuple[str, str, str, str, float, list[int]]:
+    def _main(self, program: str) -> tuple[str, str, str, str, float, list[int], list[int]]:
         try:
             start_time = time.perf_counter()
 
             #loads the grammar into the parser
-            code_parser = Lark(self.grammar, start='start', parser='lalr')
+            code_parser = Lark(self.grammar, start='start', parser='lalr', propagate_positions=True)
 
             # gets the parse-tree and writes it to program.tre
             parse_tree = code_parser.parse(program)
@@ -82,17 +82,25 @@ class Compiler(ABC):
             # gets the binary string and writes it to program.hex
             binary_str = ""
             binary_to_assembly_mappings: list[int] = []
-            total = 0
+            code_mappings: list[int] = []
+            total: int = 0
+            code_line: int = 1
             for cmd in transformed:
                 cmd.compute_op()
                 temp = cmd.get_binary()
                 total += len(temp)//4
+                if cmd.line_num != -1:
+                    code_line = max(cmd.line_num, code_line)
                 binary_to_assembly_mappings.append(total)
+                code_mappings.append(code_line)
+
                 binary_str += temp
 
             end_time = time.perf_counter()
 
-            return HtmlDetailsTransformer().transform(parse_tree), asm_str, binary_str, "", end_time - start_time, binary_to_assembly_mappings
+
+            return HtmlDetailsTransformer().transform(parse_tree), asm_str, binary_str, "", end_time - start_time, binary_to_assembly_mappings, code_mappings
 
         except Exception as e:
-            return "", "", "", str(e), 0, []
+            import traceback
+            return "", "", "", str(traceback.print_exc()), 0, [], []

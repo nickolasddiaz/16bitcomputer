@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Uint16Array Nested Viewer</title>
+</head>
+<body>
+
+<h1>Uint16Array Nested Viewer</h1>
+<div id="viewer"></div>
+
+<script>
+function renderUint16ArrayNested(arr, container, startIdx, endIdx, chunkSize) {
+    const rangeSize = endIdx - startIdx;
+    
+    if (rangeSize <= 10) {
+    	const valueDiv = document.createElement("div");
+        valueDiv.className = "array-chunk";
+        for (let i = startIdx; i < endIdx; i++) {
+            valueDiv.textContent += `[${i}]:${arr[i]} `;
+        }
+        container.appendChild(valueDiv);
+        return;
+    }
+    
+    for (let chunkStart = startIdx; chunkStart < endIdx; chunkStart += chunkSize) {
+        const chunkEnd = Math.min(chunkStart + chunkSize, endIdx);
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = `[${chunkStart}..${chunkEnd - 1}] (${chunkEnd - chunkStart} elements)`;
+        details.appendChild(summary);
+        
+        details.addEventListener('toggle', (event) => {
+            if (details.open) {
+                console.log(`Opening [${chunkStart}..${chunkEnd - 1}]`);
+                // Subdivide this chunk into smaller pieces
+                const nextChunkSize = Math.floor(chunkSize / 10);
+                renderUint16ArrayNested(arr, details, chunkStart, chunkEnd, nextChunkSize);
+            } else {
+                console.log(`Closing [${chunkStart}..${chunkEnd - 1}]`);
+                // Remove all children except the summary
+                while (details.children.length > 1) {
+                    details.removeChild(details.lastChild);
+                }
+            }
+        });
+        
+        container.appendChild(details);
+    }
+}
+
+// Create and populate the array
+const bigArray = new Uint16Array(65536);
+for (let i = 0; i < bigArray.length; i++) {
+    bigArray[i] = i % 65536;
+}
+
+// Calculate initial chunk size and render
+const initialChunkSize = 10 ** Math.floor(Math.log10(bigArray.length) + 1);
+console.log(`Initial chunk size: ${initialChunkSize}`);
+renderUint16ArrayNested(bigArray, document.getElementById("viewer"), 0, bigArray.length, initialChunkSize);
+</script>
+
+</body>
+</html>

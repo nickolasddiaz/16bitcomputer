@@ -244,14 +244,14 @@ export class emulator{
     JL(value:number){if (this.status_flags.less) this.pc.JMP(value);}
     JGE(value:number){if (this.status_flags.greater || this.status_flags.equal) this.pc.JMP(value);}
     CALL(value:number){
-    let sp = this.register.getRegItem(STACK_POINTER);
-        this.ram[sp + 1] = this.pc.count;
+        let sp = this.register.getRegItem(STACK_POINTER);
+        this.ram[sp] = this.pc.count + 1;
         this.pc.JMP(value);
     }
 
     RTRN(){
         let sp = this.register.getRegItem(STACK_POINTER);
-        this.pc.JMP(this.ram[sp + 1] as number);
+        this.pc.JMP(this.ram[sp] as number);
     }
 
     NOP(){}

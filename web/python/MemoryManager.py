@@ -91,15 +91,17 @@ class MemoryManager:
         Set the argument's variables for example def main (a, b) -> (a,1), (b,2)
         """
         for index, arg in enumerate(args):
-            self._ram[arg] = index + self.return_offset
+            self._ram[arg] = -(index+2)
 
     def _get_min(self) -> int:
         """
-        just gets the min of the key that is not used starting at 2
+        just gets the min of the key that is not used starting at 1
         """
         values = sorted([key for key in self._ram.values()])
-        expected_value = self.return_offset
+        expected_value = 1
         for value in values:
+            if value < 0:
+                continue
             if value > expected_value:
                 return expected_value
             expected_value = value + 1
@@ -135,11 +137,11 @@ class MemoryManager:
         """
         variable, var_lists = self.compiler_helper.extract_variable_and_commands(cmd, [])
         for cmd in var_lists:
-            self.allocate_command(cmd, instruction, function_name)
+            self.allocate_command(cmd, instruction, function_name, cmd.line_num)
         temp_var = self.allocate_helper(variable, Operand.MOV)
         return temp_var, var_lists
 
-    def allocate_command(self, cmd: Command, instruction: int, function_name: str) -> list[Command]:
+    def allocate_command(self, cmd: Command, instruction: int, function_name: str, line:int) -> list[Command]:
         """
         Performs logic for command objects, it allocates the variables
         Performs logic for the RETURN_HELPER and CALL_HELPER
@@ -180,12 +182,12 @@ class MemoryManager:
 
                 var_location = self.allocate_helper(variable)
                 # gets the jump_label of the variable and put it in the right jump_label
-                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(index + self.stack_offset), var_location)])
+                final_command.extend(var_lists + [Command(Operand.MOV, RamVar(index + self.stack_offset), var_location, line_num=line)])
 
             # clean up before returning
-            final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer()),  # cleaning function's frame
-                                  Command(Operand.POP, base_pointer()),  # pop the base_pointer
-                                  Command(Operand.RTRN)
+            final_command.extend([Command(Operand.MOV, stack_pointer(), base_pointer(), line_num=line),  # cleaning function's frame
+                                  Command(Operand.POP, base_pointer(), line_num=line),  # pop the base_pointer
+                                  Command(Operand.RTRN, line_num=line)
                                   ])
             return final_command
 
@@ -199,24 +201,24 @@ class MemoryManager:
                 return [Command(Operand[cmd.call_label])]
             elif cmd.call_label in ["VID_RED","VID_GREEN","VID_BLUE", "VID_X", "VID_Y"]:
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)
-                return var_lists + [Command(Operand[cmd.call_label], variable)]
+                return var_lists + [Command(Operand[cmd.call_label], variable, line_num=line)]
             elif cmd.call_label == "VIDEO":
                 variable, var_lists = self.complex_commands_helper(cmd.source[0], instruction, function_name)
                 variable1, var_lists1 = self.complex_commands_helper(cmd.source[1], instruction, function_name)
                 variable2, var_lists2 = self.complex_commands_helper(cmd.source[2], instruction, function_name)
                 variable3, var_lists3 = self.complex_commands_helper(cmd.source[3], instruction, function_name)
                 variable4, var_lists4 = self.complex_commands_helper(cmd.source[4], instruction, function_name)
-                return (var_lists + [Command(Operand.VID_RED, variable)]
-                        + var_lists1 + [Command(Operand.VID_GREEN, variable1)]
-                        + var_lists2 + [Command(Operand.VID_BLUE, variable2)]
-                        + var_lists3 + [Command(Operand.VID_X, variable1)]
-                        + var_lists4 + [Command(Operand.VID_Y, variable2)]
-                        + [Command(Operand.VID)])
+                return (var_lists + [Command(Operand.VID_RED, variable, line_num=line)]
+                        + var_lists1 + [Command(Operand.VID_GREEN, variable1, line_num=line)]
+                        + var_lists2 + [Command(Operand.VID_BLUE, variable2, line_num=line)]
+                        + var_lists3 + [Command(Operand.VID_X, variable1, line_num=line)]
+                        + var_lists4 + [Command(Operand.VID_Y, variable2, line_num=line)]
+                        + [Command(Operand.VID, line_num=line)])
 
             # compute the arguments
             for index, arg in enumerate(cmd.source):
                 variable, var_lists = self.complex_commands_helper(arg, instruction, function_name)
-                final_command.extend(var_lists + [Command(Operand.PUSH, variable)])
+                final_command.extend(var_lists + [Command(Operand.PUSH, variable, line_num=line)])
 
             # compute the returns if it does exist move it else let it be
             for index, arg in enumerate(cmd.destination):
@@ -225,11 +227,11 @@ class MemoryManager:
                 if var_location is None:
                     self._ram[arg] = return_offset  # let it exist without moving it
                 else:  # move it because it existed
-                    final_command.append(Command(Operand.MOV, RamVar(var_location), RamVar(return_offset)))
+                    final_command.append(Command(Operand.MOV, RamVar(var_location), RamVar(return_offset), line_num=line))
 
             return final_command + [
-                Command(Operand.CALL, None, None, jump_manager.get_function(cmd.call_label)),
-                Command(Operand.ADD, stack_pointer(), len(cmd.source))
+                Command(Operand.CALL, None, None, jump_manager.get_function(cmd.call_label), line_num=line),
+                Command(Operand.ADD, stack_pointer(), len(cmd.source), line_num=line)
             ]
 
         # logic assigning ram locations for var _names, handling cases of allocating new variables and the jump_label of old variables
